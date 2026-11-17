@@ -71,6 +71,8 @@ function App() {
   const [expandedTicket, setExpandedTicket] = useState("");
   const [ticketHistory, setTicketHistory] = useState({});
   const [historyLoading, setHistoryLoading] = useState("");
+  const [ticketAttachments, setTicketAttachments] = useState({});
+  const [attachmentLoading, setAttachmentLoading] = useState("");
   const [queueTab, setQueueTab] = useState("active");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -183,6 +185,50 @@ function App() {
       setTicketHistory(prev => ({ ...prev, [ticketId]: (data || []).map(x => ({ ...x, author_name: authors[x.author_id] || (x.author_id ? "Equipe da unidade" : "Sistema") })) }));
     } catch (e) { setError(e.message || "Não foi possível carregar o histórico."); }
     finally { setHistoryLoading(""); }
+  }
+  async function loadTicketAttachments(ticketId) {
+    setAttachmentLoading(ticketId);
+    try {
+      const { data, error: listError } = await supabase.from("ticket_attachments")
+        .select("id,storage_path,file_name,mime_type,file_size,attachment_type,created_at")
+        .eq("ticket_id", ticketId).eq("store_id", storeId).order("created_at", { ascending: false });
+      if (listError) throw listError;
+      const items = await Promise.all((data || []).map(async item => {
+        const { data: signed, error: signError } = await supabase.storage.from("maintenance-attachments").createSignedUrl(item.storage_path, 900);
+        if (signError) throw signError;
+        return { ...item, signed_url: signed.signedUrl };
+      }));
+      setTicketAttachments(prev => ({ ...prev, [ticketId]: items }));
+    } catch (e) { setError(e.message || "Não foi possível carregar os anexos."); }
+    finally { setAttachmentLoading(""); }
+  }
+  async function uploadTicketAttachments(ticketId, fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const allowed = ["image/jpeg","image/png","image/webp","image/heic","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"];
+    setAttachmentLoading(ticketId); setError("");
+    try {
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) throw new Error("Cada arquivo deve ter no máximo 10 MB.");
+        if (!allowed.includes(file.type)) throw new Error("Formato não permitido: " + file.name);
+        const safeName = file.name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
+        const path = storeId + "/" + ticketId + "/" + crypto.randomUUID() + "-" + safeName;
+        const { error: uploadError } = await supabase.storage.from("maintenance-attachments").upload(path, file, { contentType: file.type, upsert: false });
+        if (uploadError) throw uploadError;
+        const { error: insertError } = await supabase.from("ticket_attachments").insert({
+          ticket_id: ticketId, store_id: storeId, uploaded_by: session.user.id,
+          storage_path: path, file_name: file.name, mime_type: file.type,
+          file_size: file.size, attachment_type: file.type.startsWith("image/") ? "image" : "document"
+        });
+        if (insertError) {
+          await supabase.storage.from("maintenance-attachments").remove([path]);
+          throw insertError;
+        }
+      }
+      setNotice(files.length === 1 ? "Anexo enviado." : files.length + " anexos enviados.");
+      await loadTicketAttachments(ticketId);
+    } catch (e) { setError(e.message || "Não foi possível enviar o anexo."); }
+    finally { setAttachmentLoading(""); }
   }
   async function runOps(payload) {
     setBusy(true); setError("");
@@ -379,6 +425,14 @@ function App() {
                 {canApprove && t.approval_status === "pending" && <><button className="button button-primary" onClick={() => runOps({action:"decide_approval",ticket_id:t.id,decision:"approved"})}>Aprovar execução</button><button className="button button-secondary" onClick={() => { const note = window.prompt("Motivo da reprovação:"); if (note) runOps({action:"decide_approval",ticket_id:t.id,decision:"rejected",note}); }}>Reprovar</button></>}
                 {["maintenance","maintenance_assistant","administrative","admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const v = window.prompt("Orçamento previsto (R$):", t.estimated_budget ?? ""); if (v !== null) runOps({action:"set_financials",ticket_id:t.id,estimated_budget:v}); }}>Informar orçamento</button>}
                 {["administrative","admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const v = window.prompt("Custo realizado (R$):", t.actual_cost ?? ""); if (v !== null) runOps({action:"set_financials",ticket_id:t.id,actual_cost:v}); }}>Informar custo</button>}
+                <div className="ticket-attachments">
+                  <strong>Fotos e documentos</strong>
+                  <Field label="Adicionar arquivos" hint="Imagens, PDF, Word, Excel ou TXT. Até 10 MB por arquivo.">
+                    <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,application/pdf,.doc,.docx,.xls,.xlsx,.txt" disabled={attachmentLoading === t.id} onChange={e => { uploadTicketAttachments(t.id, e.target.files); e.target.value = ""; }}/>
+                  </Field>
+                  <button type="button" className="button button-secondary" onClick={() => loadTicketAttachments(t.id)} disabled={attachmentLoading === t.id}>{attachmentLoading === t.id ? "Carregando..." : ticketAttachments[t.id] ? "Atualizar anexos" : "Ver anexos"}</button>
+                  {ticketAttachments[t.id] && <div className="attachment-list">{ticketAttachments[t.id].length ? ticketAttachments[t.id].map(file => <a className="attachment-item" key={file.id} href={file.signed_url} target="_blank" rel="noreferrer"><span>{file.attachment_type === "image" ? "Imagem" : "Documento"} · {file.file_name}</span><small>{(file.file_size / 1024 / 1024).toLocaleString("pt-BR",{maximumFractionDigits:2})} MB · {new Date(file.created_at).toLocaleString("pt-BR")}</small></a>) : <p className="muted">Nenhum anexo neste chamado.</p>}</div>}
+                </div>
                 <button className="button button-secondary" onClick={() => loadTicketHistory(t.id)}>{historyLoading === t.id ? "Carregando histórico..." : ticketHistory[t.id] ? "Atualizar histórico" : "Ver histórico"}</button>
                 {ticketHistory[t.id] && <div className="ticket-history"><strong>Histórico do chamado</strong>{ticketHistory[t.id].length ? ticketHistory[t.id].map(item => <div className="history-entry" key={item.id}><div><b>{item.update_type === "status_change" ? "Mudança de status" : item.update_type === "approval_request" ? "Solicitação de aprovação" : item.update_type === "approval_decision" ? "Decisão de aprovação" : item.update_type === "cost_update" ? "Atualização financeira" : item.update_type === "ticket_deleted" ? "Exclusão" : "Registro"}</b><small>{item.author_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div><p>{item.update_type === "status_change" && item.new_status ? (item.old_status ? `Status alterado de ${statusLabels[item.old_status] || item.old_status} para ${statusLabels[item.new_status] || item.new_status}.` : `Status alterado para ${statusLabels[item.new_status] || item.new_status}.`) : item.message}</p>{item.old_status && item.new_status && <small>{statusLabels[item.old_status] || item.old_status} → {statusLabels[item.new_status] || item.new_status}</small>}</div>) : <p className="muted">Nenhum evento registrado.</p>}</div>}
                 {canDelete && <button className="button button-danger" onClick={() => { const reason = window.prompt("Motivo obrigatório para excluir o chamado:"); if (reason) runOps({action:"delete_ticket",ticket_id:t.id,reason}); }}>Excluir chamado</button>}
