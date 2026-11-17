@@ -156,8 +156,7 @@ function App() {
   const publicPage = ["new","track"].includes(page);
   const selectedStore = stores.find(s => s.id === storeId);
   const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user ? "dashboard" : "new"); };
-  const selectedStore = stores.find(s => s.id === storeId);
-  const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user ? "dashboard" : "new"); };
+
 
   return <div className="app-shell">
     <header className="topbar">
