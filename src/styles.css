@@ -85,3 +85,5 @@
 .attachment-item{display:grid;gap:4px;padding:9px 10px;border:1px solid var(--line);border-radius:7px;color:#d9dee8;text-decoration:none;font-size:11px;overflow-wrap:anywhere}
 .attachment-item:hover{border-color:#bd914c}
 .attachment-item small{color:var(--muted);font-size:10px}
+
+.approval-attribution{margin-top:5px!important;color:#e4bd75!important;font-size:11px!important;font-weight:600}
