@@ -58,3 +58,14 @@
   .ticket-date{margin-left:auto}
   .ticket-manage{margin-left:0}
 }
+
+
+/* Abas de organização da fila */
+.queue-tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;margin-top:12px;border-bottom:1px solid var(--border,#30343d);scrollbar-width:thin}
+.queue-tab{display:inline-flex;align-items:center;justify-content:center;gap:9px;flex:0 0 auto;padding:10px 14px;border:1px solid var(--border,#30343d);border-radius:9px;background:#20232a;color:#aeb6c4;font:inherit;font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+.queue-tab span{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:99px;background:#111318;color:#d7dce5;font:11px "DM Mono",monospace}
+.queue-tab:hover{border-color:#bd914c;color:#f4f1ea}
+.queue-tab.active{background:linear-gradient(135deg,#e4b96f,#bd8e46);border-color:#d6a75e;color:#17130d}
+.queue-tab.active span{background:rgba(25,20,12,.16);color:#17130d}
+.queue-tools .search-box{flex:1}
+@media(max-width:680px){.queue-tabs{margin-left:-2px;margin-right:-2px;padding-bottom:10px}.queue-tab{padding:9px 11px;font-size:11px}}
