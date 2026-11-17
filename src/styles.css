@@ -99,3 +99,5 @@
 .age-awful{color:#e69a9a;background:#3e292d}
 .age-critical{color:#ff8585;background:#512329;border-color:#a84a54}
 @media(max-width:680px){.ticket-age{min-width:58px;padding:5px 6px}}
+
+.financial-positive{color:#83d5ad;font-weight:700}
