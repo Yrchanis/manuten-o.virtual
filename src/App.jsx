@@ -99,6 +99,8 @@ function App() {
   const [attachmentLoading, setAttachmentLoading] = useState("");
   const [queueTab, setQueueTab] = useState("active");
   const [financialPeriod, setFinancialPeriod] = useState("all");
+  const [monthlyPeriods, setMonthlyPeriods] = useState([]);
+  const [monthlyGoalInput, setMonthlyGoalInput] = useState("");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [form, setForm] = useState({
@@ -140,6 +142,7 @@ function App() {
       if (!memberships?.length || p?.active === false) throw new Error("Este usuário não possui acesso ativo à loja selecionada. Solicite liberação ao administrador.");
       setMembership(memberships[0]); setProfile(p);
       await loadTickets(memberships[0].store_id);
+      await loadMonthlyPeriods(memberships[0].store_id);
     } catch (e) { setError(e.message || "Falha ao carregar o painel."); }
     finally { setBusy(false); }
   }
@@ -148,6 +151,42 @@ function App() {
     const { data, error: queryError } = await supabase.from("tickets").select("*").eq("store_id", id).is("deleted_at", null).order("opened_at", { ascending: false }).limit(300);
     if (queryError) throw queryError;
     setTickets(data || []);
+  }
+  async function loadMonthlyPeriods(id = membership?.store_id) {
+    if (!id || !supabase) return;
+    const { data, error: queryError } = await supabase.from("monthly_financial_periods").select("*").eq("store_id", id).order("period_start", { ascending: false }).limit(24);
+    if (queryError) throw queryError;
+    setMonthlyPeriods(data || []);
+    const currentKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date()) + "-01";
+    const current = (data || []).find(x => x.period_start === currentKey);
+    setMonthlyGoalInput(current ? String(current.goal_amount ?? 0) : "0");
+  }
+  async function saveMonthlyGoal(e) {
+    e.preventDefault();
+    const currentKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date()) + "-01";
+    const current = monthlyPeriods.find(x => x.period_start === currentKey);
+    const amount = Number(String(monthlyGoalInput).replace(/\\./g, "").replace(",", "."));
+    if (!["admin","management"].includes(membership?.role)) { setError("Somente ADMIN e Gerência podem alterar a Meta do mês."); return; }
+    if (!current || current.closed_at) { setError("O período atual não está disponível para edição."); return; }
+    if (!Number.isFinite(amount) || amount < 0) { setError("Informe uma meta válida, igual ou maior que zero."); return; }
+    setBusy(true); setError("");
+    try {
+      const { data, error: updateError } = await supabase.from("monthly_financial_periods").update({ goal_amount: amount, updated_at: new Date().toISOString() }).eq("id", current.id).select("*").single();
+      if (updateError) throw updateError;
+      setMonthlyPeriods(items => items.map(x => x.id === data.id ? data : x));
+      setNotice("Meta do mês atualizada.");
+    } catch (err) { setError(err.message || "Não foi possível salvar a meta."); }
+    finally { setBusy(false); }
+  }
+  function exportMonthlyReport(period) {
+    const report = period.report_data;
+    if (!report?.tickets) { setError("O relatório deste período não está disponível."); return; }
+    const headers = ["Protocolo","Título","Local","Status","Prioridade","Orçamento solicitado","Valor aprovado","Custo realizado","Abertura","Conclusão"];
+    const rows = report.tickets.map(t => [t.protocol,t.title,t.location,statusLabels[t.status] || t.status,priorityLabels[t.priority] || t.priority,t.estimated_budget ?? "",t.approved_budget ?? "",t.actual_cost ?? "",t.opened_at ? new Date(t.opened_at).toLocaleString("pt-BR") : "",t.resolved_at ? new Date(t.resolved_at).toLocaleString("pt-BR") : ""]);
+    const csv = [headers,...rows].map(row => row.map(v => '"' + String(v ?? "").replace(/"/g,'""') + '"').join(";")).join("\\r\\n");
+    const blob = new Blob(["\\ufeff"+csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a");
+    a.href = url; a.download = "relatorio-financeiro-" + (selectedStore?.code || "loja") + "-" + period.period_start.slice(0,7) + ".csv"; a.click(); URL.revokeObjectURL(url);
   }
   async function submitTicket(e) {
     e.preventDefault(); setBusy(true); setError(""); setTicketResult(null);
@@ -375,6 +414,17 @@ function App() {
       sector: group("sector_id"), category: group("category_id") };
   }, [financialTickets, sectors, categories]);
   const money = value => Number(value || 0).toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
+  const currentMonthKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date()) + "-01";
+  const currentMonthPeriod = monthlyPeriods.find(x => x.period_start === currentMonthKey);
+  const currentMonthTickets = tickets.filter(t => {
+    const date = new Date(t.opened_at);
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(date);
+    return parts + "-01" === currentMonthKey;
+  });
+  const currentMonthActual = currentMonthTickets.reduce((sum,t) => sum + (Number(t.actual_cost) || 0), 0);
+  const monthlyGoal = Number(currentMonthPeriod?.goal_amount) || 0;
+  const monthlyProgress = monthlyGoal > 0 ? Math.min(100, currentMonthActual / monthlyGoal * 100) : 0;
+  const formatMonth = value => new Date(value + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 
   const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); };
   const publicPage = ["new","track"].includes(page);
@@ -503,6 +553,12 @@ function App() {
         <div className="dash-heading"><div><div className="eyebrow">CONTROLE DE DESPESAS</div><h1>Painel financeiro</h1><p>{membership.stores?.name || "Unidade"} · valores dos chamados registrados</p></div><div className="dash-actions"><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar à fila</button><button className="button button-secondary" onClick={exportReport}>Exportar CSV</button></div></div>
         <section className="panel financial-panel">
           <div className="queue-heading"><div><span className="section-index">PERÍODO DE ANÁLISE</span><h3>Resumo financeiro</h3></div><select className="financial-period" value={financialPeriod} onChange={e=>setFinancialPeriod(e.target.value)}><option value="all">Todo o histórico</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="month">Mês atual</option><option value="year">Ano atual</option></select></div>
+          <div className="monthly-goal-card">
+            <div className="monthly-goal-heading"><div><span className="section-index">PLANEJAMENTO MENSAL</span><h3>Meta do mês</h3><strong>{money(monthlyGoal)}</strong></div>{["admin","management"].includes(membership.role) && <form className="monthly-goal-form" onSubmit={saveMonthlyGoal}><label htmlFor="monthly-goal-value">Definir meta (R$)</label><input id="monthly-goal-value" inputMode="decimal" value={monthlyGoalInput} onChange={e=>setMonthlyGoalInput(e.target.value)} placeholder="Ex.: 15000,00"/><button className="button button-primary" disabled={busy || !!currentMonthPeriod?.closed_at}>Salvar meta</button></form>}</div>
+            <div className="monthly-goal-track"><div style={{width: monthlyProgress + "%"}}/></div>
+            <div className="monthly-goal-caption"><span>Realizado: <b>{money(currentMonthActual)}</b></span><span>{monthlyGoal > 0 ? monthlyProgress.toLocaleString("pt-BR",{maximumFractionDigits:1}) + "% da meta" : "Meta ainda não definida"}</span></div>
+            <p className="financial-footnote">A meta é individual por unidade. No primeiro dia de cada mês, o período anterior é arquivado e uma nova meta começa em R$ 0,00.</p>
+          </div>
           <div className="financial-kpis">
             <article className="financial-kpi"><span>Orçamento solicitado</span><strong>{money(financialSummary.requested)}</strong></article>
             <article className="financial-kpi"><span>Valor aprovado</span><strong>{money(financialSummary.approved)}</strong></article>
@@ -515,7 +571,8 @@ function App() {
           <section className="panel financial-breakdown"><span className="section-index">DISTRIBUIÇÃO</span><h3>Por setor</h3>{financialSummary.sector.length ? financialSummary.sector.map(x=><div className="financial-breakdown-row" key={x.name}><div><b>{x.name}</b><small>{x.count} chamados · solicitado {money(x.requested)} · aprovado {money(x.approved)}</small></div><strong>{money(x.actual)}</strong></div>) : <p className="muted">Sem registros no período.</p>}</section>
           <section className="panel financial-breakdown"><span className="section-index">DISTRIBUIÇÃO</span><h3>Por categoria</h3>{financialSummary.category.length ? financialSummary.category.map(x=><div className="financial-breakdown-row" key={x.name}><div><b>{x.name}</b><small>{x.count} chamados · solicitado {money(x.requested)} · aprovado {money(x.approved)}</small></div><strong>{money(x.actual)}</strong></div>) : <p className="muted">Sem registros no período.</p>}</section>
         </div>
-        <p className="financial-footnote">Os totais consideram os valores preenchidos nos chamados desta unidade. Registros sem valor financeiro permanecem na contagem, mas não alteram as somas.</p>
+        <section className="panel financial-history"><div className="queue-heading"><div><span className="section-index">ARQUIVO AUTOMÁTICO</span><h3>Relatórios mensais encerrados</h3></div></div>{monthlyPeriods.filter(x=>x.closed_at && x.report_data).length ? monthlyPeriods.filter(x=>x.closed_at && x.report_data).map(period=><div className="financial-history-row" key={period.id}><div><b>{formatMonth(period.period_start)}</b><small>{period.report_data.summary?.ticket_count || 0} chamados · custo realizado {money(period.report_data.summary?.actual_total)}</small></div><button className="button button-secondary" onClick={()=>exportMonthlyReport(period)}>Baixar relatório CSV</button></div>) : <p className="muted">Nenhum mês encerrado foi arquivado ainda.</p>}</section>
+        <p className="financial-footnote">Os totais consideram os valores preenchidos nos chamados desta unidade. O relatório mensal é um retrato dos chamados abertos no período, preservado no banco após o fechamento.</p>
       </section>}
       {page === "internal-new" && session && membership && canCreateInternal && <section className="panel form-panel page-panel">
         <div className="panel-heading"><div><span className="section-index">REGISTRO INTERNO</span><h3>Novo chamado</h3></div><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar</button></div>
