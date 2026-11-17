@@ -44,7 +44,7 @@ function Priority({ value }) {
   return <span className={`priority priority-${value}`}>{priorityLabels[value] || value}</span>;
 }
 function App() {
-  const [page, setPage] = useState("new");
+  const [page, setPage] = useState("select-store");
   const [stores, setStores] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -87,19 +87,19 @@ function App() {
   useEffect(() => {
     if (!session?.user) { setMembership(null); setProfile(null); setTickets([]); return; }
     loadStaffContext();
-  }, [session?.user?.id]);
+  }, [session?.user?.id, storeId]);
 
   async function loadStaffContext() {
-    if (!session?.user || !supabase) return;
+    if (!session?.user || !supabase || !storeId) return;
     setBusy(true); setError("");
     try {
       const [{ data: memberships, error: mErr }, { data: p, error: pErr }] = await Promise.all([
-        supabase.from("user_store_memberships").select("id, store_id, role, active, stores(name, code)").eq("user_id", session.user.id).eq("active", true),
+        supabase.from("user_store_memberships").select("id, store_id, role, active, stores(name, code)").eq("user_id", session.user.id).eq("active", true).eq("store_id", storeId),
         supabase.from("profiles").select("display_name, active").eq("id", session.user.id).maybeSingle()
       ]);
       if (mErr) throw mErr;
       if (pErr) throw pErr;
-      if (!memberships?.length || p?.active === false) throw new Error("Este usuário não possui vínculo ativo com uma loja. Solicite acesso ao administrador.");
+      if (!memberships?.length || p?.active === false) throw new Error("Este usuário não possui acesso ativo à loja selecionada. Solicite liberação ao administrador.");
       setMembership(memberships[0]); setProfile(p);
       await loadTickets(memberships[0].store_id);
     } catch (e) { setError(e.message || "Falha ao carregar o painel."); }
@@ -114,14 +114,14 @@ function App() {
   async function submitTicket(e) {
     e.preventDefault(); setBusy(true); setError(""); setTicketResult(null);
     try {
-      const data = await publicApi({ action: "create_ticket", store_id: storeId, ...form });
+      if (!storeId) throw new Error("Selecione uma loja antes de abrir o chamado.");\n      const data = await publicApi({ action: "create_ticket", store_id: storeId, ...form });
       if (data.protocol) { setTicketResult(data); setForm({ requester_name:"", requester_contact:"", sector_id:"", category_id:"", location:"", title:"", description:"", website:"" }); }
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   }
   async function submitTracking(e) {
     e.preventDefault(); setBusy(true); setError(""); setTracking(null);
-    try { setTracking(await publicApi({ action: "track_ticket", ...trackForm })); }
+    try { setTracking(await publicApi({ action: "track_ticket", store_id: storeId, ...trackForm })); }
     catch (e) { setError(e.message); }
     finally { setBusy(false); }
   }
@@ -135,7 +135,7 @@ function App() {
     finally { setBusy(false); }
   }
   async function signOut() {
-    await supabase?.auth.signOut(); setPage("new"); setMembership(null); setTickets([]);
+    await supabase?.auth.signOut(); setPage("select-store"); setStoreId(""); setMembership(null); setTickets([]);
   }
 
   const visibleTickets = useMemo(() => tickets.filter(t => {
@@ -152,7 +152,7 @@ function App() {
   }), [tickets]);
 
   const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); };
-  const publicPage = ["new","track"].includes(page);
+  const publicPage = ["new","track"].includes(page);\n  const selectedStore = stores.find(s => s.id === storeId);\n  const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage("new"); };
 
   return <div className="app-shell">
     <header className="topbar">
@@ -169,7 +169,7 @@ function App() {
       {publicPage && <section className="hero">
         <div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line"/> OPERAÇÃO • MANUTENÇÃO</div>
           <h1>Manutenção em<br/><em>movimento.</em></h1>
-          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p>
+          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div>
         </div>
         <div className="hero-art" aria-hidden="true"><div className="art-ring ring-one"/><div className="art-ring ring-two"/><div className="art-center"><Wrench size={44}/></div><span className="art-cross cross-a">+</span><span className="art-cross cross-b">+</span></div>
       </section>}
@@ -177,9 +177,9 @@ function App() {
       {error && <div className="alert alert-error"><AlertCircle size={17}/><span>{error}</span><button onClick={() => setError("")}><X size={15}/></button></div>}
       {notice && <div className="alert alert-success"><CheckCircle2 size={17}/>{notice}</div>}
 
-      {page === "new" && <section className="content-grid">
+      {page === "select-store" && <section className="store-select-wrap"><div className="store-select-heading"><div className="eyebrow">AMBIENTE MULTILOJA</div><h1>Selecione a<br/><em>sua unidade.</em></h1><p>Escolha a loja para acessar a central de manutenção correspondente. Os registros são mantidos separados por unidade.</p></div><div className="store-card-grid">{stores.map((s) => <button className="store-card" key={s.id} onClick={() => chooseStore(s.id)}><span className="store-card-code">{s.code === "MAC" ? "232" : s.code}</span><span className="store-card-name">{s.name.replace(/^Loja\s+\S+\s+-\s*/, "")}</span><span className="store-card-city">{s.city} · {s.state}</span><span className="store-card-action">Entrar na unidade <ArrowRight size={16}/></span></button>)}</div>{!stores.length && <div className="empty-state">Carregando unidades...</div>}</section>}\n\n      {page === "new" && storeId && <section className="content-grid">
         <aside className="side-intro">
-          <div className="side-kicker">CENTRAL DE SERVIÇOS <span>01 / 02</span></div>
+          <div className="side-kicker">CENTRAL DE SERVIÇOS <span>{selectedStore?.code === "MAC" ? "232" : selectedStore?.code || "UNIDADE"}</span></div>
           <h2>Abra um<br/>chamado.</h2>
           <p>Descreva o problema com clareza. A equipe de manutenção receberá a solicitação para avaliação.</p>
           <div className="side-note"><ShieldCheck size={18}/><span>Não é necessário fazer login para solicitar atendimento.</span></div>
@@ -211,7 +211,7 @@ function App() {
         </section>
       </section>}
 
-      {page === "track" && <section className="content-grid">
+      {page === "track" && storeId && <section className="content-grid">
         <aside className="side-intro"><div className="side-kicker">CENTRAL DE SERVIÇOS <span>02 / 02</span></div><h2>Acompanhe<br/>o chamado.</h2><p>Consulte o andamento usando o protocolo e o código privado que recebeu ao registrar a solicitação.</p><div className="side-note"><LockKeyhole size={18}/><span>O código privado impede que terceiros consultem seu chamado.</span></div><div className="side-links"><button className="text-link" onClick={() => go("new")}>Abrir novo chamado <ArrowUpRight size={15}/></button></div></aside>
         <section className="panel form-panel">
           <form onSubmit={submitTracking}><div className="panel-heading"><div><span className="section-index">CONSULTA 02</span><h3>Localizar solicitação</h3></div></div>
@@ -234,7 +234,7 @@ function App() {
       </section>}
       {page === "dashboard" && session && !membership && <div className="panel access-wait"><ShieldCheck size={28}/><h2>Validando acesso</h2><p>Carregando vínculo com a unidade...</p><button className="button button-secondary" onClick={loadStaffContext}>Tentar novamente</button></div>}
     </main>
-    <footer className="footer"><div className="footer-inner"><Brand compact/><span>Central de Manutenção <b>•</b> Loja 232 — Macaé</span><span className="footer-status"><i/> SISTEMA EM ESTRUTURAÇÃO</span></div></footer>
+    <footer className="footer"><div className="footer-inner"><Brand compact/><span>Central de Manutenção <b>•</b> {selectedStore ? selectedStore.name : "Selecione uma unidade"}</span><span className="footer-status"><i/> SISTEMA EM ESTRUTURAÇÃO</span></div></footer>
   </div>;
 }
 
