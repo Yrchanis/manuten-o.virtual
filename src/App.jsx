@@ -81,7 +81,7 @@ function App() {
     try {
       const data = await publicApi({ action: "bootstrap", ...(id ? { store_id: id } : {}) });
       if (data.stores) setStores(data.stores);
-      if (data.sectors) setSectors(data.sectors);
+      if (data.sectors) setSectors([...data.sectors].sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })));
       if (data.categories) setCategories(data.categories);
     } catch (e) { setError(e.message); }
   };
