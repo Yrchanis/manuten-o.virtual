@@ -87,3 +87,15 @@
 .attachment-item small{color:var(--muted);font-size:10px}
 
 .approval-attribution{margin-top:5px!important;color:#e4bd75!important;font-size:11px!important;font-weight:600}
+
+
+.ticket-age{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:66px;padding:5px 8px;border:1px solid currentColor;border-radius:6px;line-height:1.15}
+.ticket-age strong{font-size:10px;font-weight:750}
+.ticket-age small{font:9px 'DM Mono',monospace;opacity:.9}
+.age-good{color:#83d5ad;background:#1c3b30}
+.age-regular{color:#9ab5d7;background:#242e39}
+.age-irregular{color:#e6c36f;background:#44391f}
+.age-bad{color:#e6a36b;background:#49301f}
+.age-awful{color:#e69a9a;background:#3e292d}
+.age-critical{color:#ff8585;background:#512329;border-color:#a84a54}
+@media(max-width:680px){.ticket-age{min-width:58px;padding:5px 6px}}
