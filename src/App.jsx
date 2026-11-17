@@ -55,7 +55,9 @@ function App() {
   const [ticketResult, setTicketResult] = useState(null);
   const [trackForm, setTrackForm] = useState({ protocol: "", tracking_token: "" });
   const [tracking, setTracking] = useState(null);
-  const [login, setLogin] = useState({ email: "", password: "" });
+  const [login, setLogin] = useState({ username: "", password: "" });
+  const [passwordChange, setPasswordChange] = useState({ password: "", confirm: "" });
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [session, setSession] = useState(null);
   const [membership, setMembership] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -90,7 +92,7 @@ function App() {
   }, [session?.user?.id, storeId]);
 
   async function loadStaffContext() {
-    if (!session?.user || !supabase || !storeId) return;
+    if (!session?.user || !supabase || !storeId || session.user.user_metadata?.must_change_password === true) return;
     setBusy(true); setError("");
     try {
       const [{ data: memberships, error: mErr }, { data: p, error: pErr }] = await Promise.all([
@@ -129,10 +131,33 @@ function App() {
   async function signIn(e) {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword(login);
+      const username = login.username.trim();
+      if (!/^\\d{7}$/.test(username)) throw new Error("Informe o usuário numérico de 7 dígitos.");
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: `${username}@central-manutencao.local`, password: login.password
+      });
       if (authError) throw authError;
+      const required = data.user?.user_metadata?.must_change_password === true;
+      setMustChangePassword(required);
+      setPage(required ? "change-password" : "dashboard");
+    } catch (e) { setError(e.message === "Invalid login credentials" ? "Usuário ou senha incorretos." : e.message); }
+    finally { setBusy(false); }
+  }
+  async function updateFirstPassword(e) {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      if (passwordChange.password.length < 6) throw new Error("A nova senha deve ter pelo menos 6 caracteres.");
+      if (passwordChange.password !== passwordChange.confirm) throw new Error("As senhas não coincidem.");
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordChange.password,
+        data: { must_change_password: false }
+      });
+      if (updateError) throw updateError;
+      setMustChangePassword(false);
+      setPasswordChange({ password: "", confirm: "" });
+      setNotice("Senha alterada. Acesso liberado.");
       setPage("dashboard");
-    } catch (e) { setError(e.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : e.message); }
+    } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   }
   async function signOut() {
@@ -228,7 +253,9 @@ function App() {
         </section>
       </section>}
 
-      {page === "login" && <section className="login-layout"><div className="login-aside"><div className="eyebrow">ÁREA RESTRITA</div><h1>Gestão com<br/><em>visibilidade.</em></h1><p>Acesso operacional para a equipe responsável pelo atendimento e gestão da manutenção.</p><div className="login-feature"><ShieldCheck size={18}/> Ambiente protegido por autenticação</div></div><section className="panel login-panel"><div className="login-icon"><LockKeyhole size={22}/></div><span className="section-index">ACESSO INTERNO</span><h2>Entrar na central</h2><p>Utilize suas credenciais de acesso.</p><form onSubmit={signIn}><Field label="E-mail"><input type="email" autoComplete="username" required value={login.email} onChange={e => setLogin(f => ({...f,email:e.target.value}))} placeholder="nome@empresa.com"/></Field><Field label="Senha"><input type="password" autoComplete="current-password" required value={login.password} onChange={e => setLogin(f => ({...f,password:e.target.value}))} placeholder="Sua senha"/></Field><button className="button button-primary full" disabled={busy || !supabase}>{busy ? "Entrando..." : "Acessar painel"} <ArrowRight size={17}/></button></form><button className="text-link back-link" onClick={() => go("new")}>Voltar ao formulário público</button></section></section>}
+      {page === "login" && <section className="login-layout"><div className="login-aside"><div className="eyebrow">ÁREA RESTRITA</div><h1>Gestão com<br/><em>visibilidade.</em></h1><p>Acesso operacional para a equipe responsável pelo atendimento e gestão da manutenção.</p><div className="login-feature"><ShieldCheck size={18}/> Ambiente protegido por autenticação</div></div><section className="panel login-panel"><div className="login-icon"><LockKeyhole size={22}/></div><span className="section-index">ACESSO INTERNO</span><h2>Entrar na central</h2><p>Utilize seu usuário e senha de acesso.</p><form onSubmit={signIn}><Field label="Usuário"><input inputMode="numeric" autoComplete="username" maxLength="7" required value={login.username} onChange={e => setLogin(f => ({...f,username:e.target.value.replace(/\\D/g, "").slice(0,7)}))} placeholder="Seu usuário numérico"/></Field><Field label="Senha"><input type="password" autoComplete="current-password" required value={login.password} onChange={e => setLogin(f => ({...f,password:e.target.value}))} placeholder="Sua senha"/></Field><button className="button button-primary full" disabled={busy || !supabase}>{busy ? "Entrando..." : "Acessar painel"} <ArrowRight size={17}/></button></form><button className="text-link back-link" onClick={() => go("new")}>Voltar ao formulário público</button></section></section>}
+
+      {page === "change-password" && session && <section className="login-layout"><div className="login-aside"><div className="eyebrow">SEGURANÇA DA CONTA</div><h1>Atualize sua<br/><em>senha.</em></h1><p>Antes de acessar os dados internos, defina uma senha pessoal e confidencial.</p></div><section className="panel login-panel"><div className="login-icon"><LockKeyhole size={22}/></div><span className="section-index">PRIMEIRO ACESSO</span><h2>Definir nova senha</h2><p>Use pelo menos 6 caracteres. Não compartilhe sua senha.</p><form onSubmit={updateFirstPassword}><Field label="Nova senha"><input type="password" autoComplete="new-password" minLength="6" required value={passwordChange.password} onChange={e => setPasswordChange(v => ({...v,password:e.target.value}))} placeholder="Mínimo de 6 caracteres"/></Field><Field label="Confirmar nova senha"><input type="password" autoComplete="new-password" minLength="6" required value={passwordChange.confirm} onChange={e => setPasswordChange(v => ({...v,confirm:e.target.value}))} placeholder="Repita a nova senha"/></Field><button className="button button-primary full" disabled={busy}>{busy ? "Salvando..." : "Salvar nova senha"} <ArrowRight size={17}/></button></form><button className="text-link back-link" onClick={signOut}>Sair</button></section></section>}
 
       {page === "dashboard" && session && membership && <section className="dashboard">
         <div className="dash-heading"><div><div className="eyebrow">VISÃO OPERACIONAL</div><h1>Painel de manutenção</h1><p>{membership.stores?.name || "Unidade"} · {membership.role === "admin" ? "Administrador" : membership.role === "leader" ? "Liderança" : "Manutenção"}</p></div><button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button></div>
