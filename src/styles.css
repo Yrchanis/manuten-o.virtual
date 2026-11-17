@@ -21,3 +21,23 @@
 .store-card-action{display:flex;align-items:center;gap:9px;margin-top:auto;padding-top:24px;color:var(--accent2);font-size:11px;font-weight:700}
 .active-store-label{display:inline-flex;align-items:center;gap:8px;margin-top:18px;padding:8px 11px;border:1px solid #d6a85c35;border-radius:7px;background:#d6a85c0d;color:var(--accent2);font-size:11px}
 @media(max-width:760px){.store-select-wrap{margin:45px auto 60px}.store-card-grid{grid-template-columns:1fr}.store-card{min-height:155px}.store-card-name{margin-top:14px}.store-card-action{padding-top:16px}}
+
+
+.dash-actions,.form-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.page-panel{margin:44px 0 30px;padding:28px 30px}
+.ticket-manage{padding:8px 11px;font-size:10px}
+.ticket-actions{width:100%;display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:14px;margin-top:7px;background:#111317;border:1px solid var(--line);border-radius:9px}
+.ticket-actions .field{min-width:190px;max-width:230px}
+.ticket-actions .field select{height:36px;padding:8px;font-size:10px}
+.ticket-actions .button{padding:9px 11px;font-size:10px}
+.ticket-financials{display:flex;gap:14px;flex-wrap:wrap;width:100%;font-size:10px;color:var(--muted)}
+.warning-text{color:var(--red);font-weight:700}
+.button-danger{background:#51262b;color:#ffb4b4;border:1px solid #7d3a40}
+.button-danger:hover{background:#673037}
+.user-list{margin-top:28px;border-top:1px solid var(--line)}
+.user-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:14px 0;border-bottom:1px solid var(--line)}
+.user-row>div{display:grid;gap:5px}
+.user-row strong{font:600 13px Manrope}
+.user-row span{font-size:10px;color:var(--muted)}
+.user-temp{margin:18px 0;justify-content:space-between;align-items:flex-start}
+@media(max-width:680px){.dash-actions{justify-content:flex-end}.page-panel{margin:26px 0;padding:22px 17px}.ticket-actions .field{max-width:none;width:100%}.ticket-actions{align-items:stretch}.ticket-actions .button{flex:1}.user-row{align-items:flex-start}.user-row .button{padding:9px}}
