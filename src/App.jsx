@@ -114,7 +114,8 @@ function App() {
   async function submitTicket(e) {
     e.preventDefault(); setBusy(true); setError(""); setTicketResult(null);
     try {
-      if (!storeId) throw new Error("Selecione uma loja antes de abrir o chamado.");\n      const data = await publicApi({ action: "create_ticket", store_id: storeId, ...form });
+      if (!storeId) throw new Error("Selecione uma loja antes de abrir o chamado.");
+      const data = await publicApi({ action: "create_ticket", store_id: storeId, ...form });
       if (data.protocol) { setTicketResult(data); setForm({ requester_name:"", requester_contact:"", sector_id:"", category_id:"", location:"", title:"", description:"", website:"" }); }
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
@@ -152,13 +153,18 @@ function App() {
   }), [tickets]);
 
   const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); };
-  const publicPage = ["new","track"].includes(page);\n  const selectedStore = stores.find(s => s.id === storeId);\n  const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage("new"); };
+  const publicPage = ["new","track"].includes(page);
+  const selectedStore = stores.find(s => s.id === storeId);
+  const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user ? "dashboard" : "new"); };
+  const selectedStore = stores.find(s => s.id === storeId);
+  const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user ? "dashboard" : "new"); };
 
   return <div className="app-shell">
     <header className="topbar">
       <div className="topbar-inner">
         <Brand />
         <div className="topbar-right">
+          {selectedStore && <button className="login-link" onClick={() => { setPage("select-store"); setMembership(null); setTickets([]); setError(""); }}><Building2 size={15}/> {selectedStore.code} · Trocar loja</button>}
           {session?.user && membership ? <><span className="user-chip"><span className="online-dot" />{profile?.display_name || session.user.email}</span><button className="icon-button" onClick={signOut} title="Sair"><LogOut size={17}/></button></> :
             <button className="login-link" onClick={() => go("login")}><LockKeyhole size={15}/> Acesso da equipe</button>}
         </div>
@@ -169,7 +175,7 @@ function App() {
       {publicPage && <section className="hero">
         <div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line"/> OPERAÇÃO • MANUTENÇÃO</div>
           <h1>Manutenção em<br/><em>movimento.</em></h1>
-          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div>
+          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div>
         </div>
         <div className="hero-art" aria-hidden="true"><div className="art-ring ring-one"/><div className="art-ring ring-two"/><div className="art-center"><Wrench size={44}/></div><span className="art-cross cross-a">+</span><span className="art-cross cross-b">+</span></div>
       </section>}
@@ -177,7 +183,9 @@ function App() {
       {error && <div className="alert alert-error"><AlertCircle size={17}/><span>{error}</span><button onClick={() => setError("")}><X size={15}/></button></div>}
       {notice && <div className="alert alert-success"><CheckCircle2 size={17}/>{notice}</div>}
 
-      {page === "select-store" && <section className="store-select-wrap"><div className="store-select-heading"><div className="eyebrow">AMBIENTE MULTILOJA</div><h1>Selecione a<br/><em>sua unidade.</em></h1><p>Escolha a loja para acessar a central de manutenção correspondente. Os registros são mantidos separados por unidade.</p></div><div className="store-card-grid">{stores.map((s) => <button className="store-card" key={s.id} onClick={() => chooseStore(s.id)}><span className="store-card-code">{s.code === "MAC" ? "232" : s.code}</span><span className="store-card-name">{s.name.replace(/^Loja\s+\S+\s+-\s*/, "")}</span><span className="store-card-city">{s.city} · {s.state}</span><span className="store-card-action">Entrar na unidade <ArrowRight size={16}/></span></button>)}</div>{!stores.length && <div className="empty-state">Carregando unidades...</div>}</section>}\n\n      {page === "new" && storeId && <section className="content-grid">
+      {page === "select-store" && <section className="store-select-wrap"><div className="store-select-heading"><div className="eyebrow">AMBIENTE MULTILOJA</div><h1>Selecione a<br/><em>sua unidade.</em></h1><p>Escolha a loja para acessar a central de manutenção correspondente. Os registros são mantidos separados por unidade.</p></div><div className="store-card-grid">{stores.map((s) => <button className="store-card" key={s.id} onClick={() => chooseStore(s.id)}><span className="store-card-code">{s.code === "MAC" ? "232" : s.code}</span><span className="store-card-name">{s.name.replace(/^Loja\s+\S+\s+-\s*/, "")}</span><span className="store-card-city">{s.city} · {s.state}</span><span className="store-card-action">Entrar na unidade <ArrowRight size={16}/></span></button>)}</div>{!stores.length && <div className="empty-state">Carregando unidades...</div>}</section>}
+
+      {page === "new" && storeId && <section className="content-grid">
         <aside className="side-intro">
           <div className="side-kicker">CENTRAL DE SERVIÇOS <span>{selectedStore?.code === "MAC" ? "232" : selectedStore?.code || "UNIDADE"}</span></div>
           <h2>Abra um<br/>chamado.</h2>
@@ -196,7 +204,6 @@ function App() {
           </div> : <form onSubmit={submitTicket}>
             <div className="panel-heading"><div><span className="section-index">FORMULÁRIO 01</span><h3>Nova solicitação</h3></div><span className="required-note">* Obrigatório</span></div>
             <div className="form-grid">
-              <Field label="Loja *"><select required value={storeId} onChange={e => { setStoreId(e.target.value); setForm(f => ({...f, sector_id:""})); loadBootstrap(e.target.value); }}><option value="">Selecione a unidade</option>{stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
               <Field label="Setor"><select value={form.sector_id} onChange={e => setForm(f => ({...f, sector_id:e.target.value}))}><option value="">Selecione o setor</option>{sectors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
               <Field label="Seu nome *"><input required minLength="2" maxLength="100" value={form.requester_name} onChange={e => setForm(f => ({...f, requester_name:e.target.value}))} placeholder="Nome e sobrenome"/></Field>
               <Field label="Contato"><input maxLength="120" value={form.requester_contact} onChange={e => setForm(f => ({...f, requester_contact:e.target.value}))} placeholder="Ramal ou telefone"/></Field>
