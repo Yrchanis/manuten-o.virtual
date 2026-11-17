@@ -14,7 +14,7 @@ const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPAB
 
 const statusLabels = {
   open: "Aberto", in_progress: "Em atendimento", waiting_material: "Aguardando material",
-  waiting_third_party: "Aguardando terceiro", resolved: "Resolvido",
+  waiting_third_party: "Esperando atendimento terceirizado", waiting_third_party_budget: "Aguardando orçamento terceirizada", waiting_coordinator_approval: "Aguardando aprovação coordenador", waiting_matrix_approval: "Aguardando aprovação matriz", resolved: "Resolvido",
   closed_unresolved: "Encerrado sem solução", cancelled: "Cancelado"
 };
 const priorityLabels = { low: "Baixa", normal: "Normal", high: "Alta", critical: "Crítica" };
@@ -225,7 +225,7 @@ function App() {
 
   const queueGroups = {
     active: ["in_progress", "open"],
-    pending: ["waiting_material", "waiting_third_party"],
+    pending: ["waiting_material", "waiting_third_party", "waiting_third_party_budget", "waiting_coordinator_approval", "waiting_matrix_approval"],
     resolved: ["resolved"],
     closed: ["closed_unresolved", "cancelled"]
   };
@@ -253,7 +253,7 @@ function App() {
   const stats = useMemo(() => ({
     total: tickets.length,
     open: tickets.filter(t => t.status === "open").length,
-    active: tickets.filter(t => ["in_progress","waiting_material","waiting_third_party"].includes(t.status)).length,
+    active: tickets.filter(t => ["in_progress","waiting_material","waiting_third_party","waiting_third_party_budget","waiting_coordinator_approval","waiting_matrix_approval"].includes(t.status)).length,
     resolved: tickets.filter(t => t.status === "resolved").length
   }), [tickets]);
 
