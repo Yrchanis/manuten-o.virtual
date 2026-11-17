@@ -69,7 +69,7 @@ function App() {
   const [userResult, setUserResult] = useState(null);
   const [internalForm, setInternalForm] = useState({ requester_name: "", requester_contact: "", sector_id: "", category_id: "", location: "", title: "", description: "" });
   const [expandedTicket, setExpandedTicket] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [queueTab, setQueueTab] = useState("active");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [form, setForm] = useState({
@@ -223,12 +223,28 @@ function App() {
     await supabase?.auth.signOut(); setPage("select-store"); setStoreId(""); setMembership(null); setTickets([]);
   }
 
-  const visibleTickets = useMemo(() => tickets.filter(t => {
-    const matchesFilter = filter === "all" || t.status === filter;
+  const queueGroups = {
+    active: ["in_progress", "open"],
+    pending: ["waiting_material", "waiting_third_party"],
+    resolved: ["resolved"],
+    closed: ["closed_unresolved", "cancelled"]
+  };
+  const queueCounts = useMemo(() => Object.fromEntries(Object.entries(queueGroups).map(([key, statuses]) => [key, tickets.filter(t => statuses.includes(t.status)).length])), [tickets]);
+  const visibleTickets = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const matchesSearch = !q || [t.protocol, t.title, t.location, t.requester_name].some(v => String(v || "").toLowerCase().includes(q));
-    return matchesFilter && matchesSearch;
-  }), [tickets, filter, search]);
+    return tickets.filter(t => {
+      const inTab = queueGroups[queueTab].includes(t.status);
+      const matchesSearch = !q || [t.protocol, t.title, t.location, t.requester_name].some(v => String(v || "").toLowerCase().includes(q));
+      return inTab && matchesSearch;
+    }).sort((a, b) => {
+      if (queueTab === "active") {
+        const aProgress = a.status === "in_progress" ? 0 : 1;
+        const bProgress = b.status === "in_progress" ? 0 : 1;
+        if (aProgress !== bProgress) return aProgress - bProgress;
+      }
+      return new Date(a.opened_at).getTime() - new Date(b.opened_at).getTime();
+    });
+  }, [tickets, queueTab, search]);
   const canManageUsers = ["admin","management"].includes(membership?.role);
   const canCreateInternal = ["admin","management","administrative"].includes(membership?.role);
   const canOperate = ["admin","management","maintenance","maintenance_assistant","leader"].includes(membership?.role);
@@ -330,7 +346,13 @@ function App() {
           </div></div>
         <div className="stat-grid"><div className="stat-card"><span>Chamados registrados</span><strong>{stats.total}</strong><ClipboardList size={20}/></div><div className="stat-card stat-open"><span>Abertos</span><strong>{stats.open}</strong><Ticket size={20}/></div><div className="stat-card stat-active"><span>Em andamento / espera</span><strong>{stats.active}</strong><Activity size={20}/></div><div className="stat-card stat-done"><span>Resolvidos</span><strong>{stats.resolved}</strong><CheckCircle2 size={20}/></div></div>
         <section className="panel queue-panel"><div className="queue-heading"><div><span className="section-index">ACOMPANHAMENTO</span><h3>Fila de chamados</h3></div><span className="count-pill">{visibleTickets.length} registros</span></div>
-          <div className="queue-tools"><div className="search-box"><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar protocolo, local ou título"/></div><select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">Todos os status</option>{Object.entries(statusLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+          <div className="queue-tools"><div className="search-box"><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar protocolo, local ou título"/></div></div>
+          <div className="queue-tabs" role="tablist" aria-label="Categorias de chamados">
+            <button type="button" role="tab" aria-selected={queueTab === "active"} className={queueTab === "active" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("active"); setExpandedTicket(""); }}>Abertos e em andamento <span>{queueCounts.active}</span></button>
+            <button type="button" role="tab" aria-selected={queueTab === "pending"} className={queueTab === "pending" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("pending"); setExpandedTicket(""); }}>Pendência <span>{queueCounts.pending}</span></button>
+            <button type="button" role="tab" aria-selected={queueTab === "resolved"} className={queueTab === "resolved" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("resolved"); setExpandedTicket(""); }}>Resolvidos <span>{queueCounts.resolved}</span></button>
+            <button type="button" role="tab" aria-selected={queueTab === "closed"} className={queueTab === "closed" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("closed"); setExpandedTicket(""); }}>Encerrados / cancelados <span>{queueCounts.closed}</span></button>
+          </div>
           <div className="ticket-list">{visibleTickets.length ? visibleTickets.map(t => <article className="ticket-row" key={t.id}><div className="ticket-row-head"><div className="ticket-main"><span className="ticket-protocol">{t.protocol}</span><h4>{t.title}</h4><p>{t.location} · {t.requester_name}</p></div><div className="ticket-tags"><Priority value={t.priority}/><Status value={t.status}/></div><div className="ticket-date">{new Date(t.opened_at).toLocaleDateString("pt-BR")}</div>
               <button className="button button-secondary ticket-manage" onClick={() => setExpandedTicket(expandedTicket === t.id ? "" : t.id)}>{expandedTicket === t.id ? "Fechar" : "Ações"}</button></div>
               {expandedTicket === t.id && <div className="ticket-actions">
