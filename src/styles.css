@@ -77,3 +77,11 @@
 .history-entry b{display:block;font-size:11px;color:#e8eaf0}
 .history-entry small{display:block;color:var(--muted);font-size:10px}
 .history-entry p{margin:0;color:#c9ced8;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+
+.ticket-attachments{width:100%;margin-top:14px;padding:15px;border:1px solid var(--line);border-radius:9px;background:#17191e;display:grid;gap:10px}
+.ticket-attachments>strong{font-size:12px;color:#e7c17e}
+.ticket-attachments input[type=file]{width:100%;font-size:11px;color:var(--muted)}
+.attachment-list{display:grid;gap:7px}
+.attachment-item{display:grid;gap:4px;padding:9px 10px;border:1px solid var(--line);border-radius:7px;color:#d9dee8;text-decoration:none;font-size:11px;overflow-wrap:anywhere}
+.attachment-item:hover{border-color:#bd914c}
+.attachment-item small{color:var(--muted);font-size:10px}
