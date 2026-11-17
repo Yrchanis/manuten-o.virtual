@@ -229,7 +229,7 @@ function App() {
     const matchesSearch = !q || [t.protocol, t.title, t.location, t.requester_name].some(v => String(v || "").toLowerCase().includes(q));
     return matchesFilter && matchesSearch;
   }), [tickets, filter, search]);
-  const canManageUsers = ["admin","management","leader"].includes(membership?.role);
+  const canManageUsers = ["admin","management"].includes(membership?.role);
   const canCreateInternal = ["admin","management","administrative"].includes(membership?.role);
   const canOperate = ["admin","management","maintenance","maintenance_assistant","leader"].includes(membership?.role);
   const canApprove = ["admin","management","leader"].includes(membership?.role);
