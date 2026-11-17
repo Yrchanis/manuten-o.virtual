@@ -101,6 +101,9 @@ function App() {
   const [financialPeriod, setFinancialPeriod] = useState("all");
   const [monthlyPeriods, setMonthlyPeriods] = useState([]);
   const [monthlyGoalInput, setMonthlyGoalInput] = useState("");
+  const [comparisonTickets, setComparisonTickets] = useState([]);
+  const [comparisonPeriods, setComparisonPeriods] = useState([]);
+  const [comparisonPeriod, setComparisonPeriod] = useState("month");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [form, setForm] = useState({
@@ -151,6 +154,27 @@ function App() {
     const { data, error: queryError } = await supabase.from("tickets").select("*").eq("store_id", id).is("deleted_at", null).order("opened_at", { ascending: false }).limit(300);
     if (queryError) throw queryError;
     setTickets(data || []);
+  }
+  async function loadComparisonData() {
+    if (!supabase || !["admin","management"].includes(membership?.role)) return;
+    setBusy(true); setError("");
+    try {
+      const [{ data: allTickets, error: ticketsError }, { data: periods, error: periodsError }] = await Promise.all([
+        supabase.from("tickets").select("id,store_id,protocol,title,status,priority,sector_id,category_id,opened_at,estimated_budget,approved_budget,actual_cost").is("deleted_at", null).order("opened_at", { ascending: false }).limit(5000),
+        supabase.from("monthly_financial_periods").select("id,store_id,period_start,goal_amount,report_data,closed_at").order("period_start", { ascending: false }).limit(5000)
+      ]);
+      if (ticketsError) throw ticketsError;
+      if (periodsError) throw periodsError;
+      setComparisonTickets(allTickets || []); setComparisonPeriods(periods || []);
+    } catch (e) { setError(e.message || "Não foi possível carregar os dados consolidados."); }
+    finally { setBusy(false); }
+  }
+  function exportComparisonCsv(rows) {
+    const headers = ["Loja","Chamados","Orçamento solicitado","Valor aprovado","Custo realizado","Saldo aprovado","Meta mensal","% da meta"];
+    const data = rows.map(x => [x.store.code,x.count,x.requested,x.approved,x.actual,x.approved-x.actual,x.goal,x.goal>0?(x.actual/x.goal*100).toFixed(1):""]);
+    const csv = [headers,...data].map(row => row.map(v => String(v ?? "").replace(/"/g,'""')).join(";")).join("\r\n");
+    const blob = new Blob(["\ufeff"+csv], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download="comparativo-financeiro-lojas.csv"; a.click(); URL.revokeObjectURL(url);
   }
   async function loadMonthlyPeriods(id = membership?.store_id) {
     if (!id || !supabase) return;
@@ -425,8 +449,22 @@ function App() {
   const monthlyGoal = Number(currentMonthPeriod?.goal_amount) || 0;
   const monthlyProgress = monthlyGoal > 0 ? Math.min(100, currentMonthActual / monthlyGoal * 100) : 0;
   const formatMonth = value => new Date(value + "T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const comparisonFilteredTickets = useMemo(() => {
+    const now=new Date(); const start=new Date(now.getFullYear(),now.getMonth(),1);
+    if(comparisonPeriod==="30") start.setDate(now.getDate()-30);
+    if(comparisonPeriod==="90") start.setDate(now.getDate()-90);
+    if(comparisonPeriod==="year") start.setMonth(0,1);
+    return comparisonTickets.filter(t=>comparisonPeriod==="all" || new Date(t.opened_at)>=start);
+  },[comparisonTickets,comparisonPeriod]);
+  const comparisonRows = useMemo(() => stores.map(store => {
+    const rows=comparisonFilteredTickets.filter(t=>t.store_id===store.id);
+    const sum=key=>rows.reduce((n,t)=>n+(Number(t[key])||0),0);
+    const p=comparisonPeriods.find(x=>x.store_id===store.id && x.period_start===currentMonthKey);
+    return {store,count:rows.length,requested:sum("estimated_budget"),approved:sum("approved_budget"),actual:sum("actual_cost"),goal:Number(p?.goal_amount)||0};
+  }).sort((a,b)=>b.actual-a.actual),[stores,comparisonFilteredTickets,comparisonPeriods,currentMonthKey]);
+  const comparisonTotals=comparisonRows.reduce((a,x)=>({count:a.count+x.count,requested:a.requested+x.requested,approved:a.approved+x.approved,actual:a.actual+x.actual}),{count:0,requested:0,approved:0,actual:0});
 
-  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); };
+  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); if (target === "comparative-financial") loadComparisonData(); };
   const publicPage = ["new","track"].includes(page);
   const selectedStore = stores.find(s => s.id === storeId);
   const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user?.user_metadata?.must_change_password === true ? "change-password" : session?.user ? "dashboard" : "new"); };
@@ -511,6 +549,7 @@ function App() {
             {canCreateInternal && <button className="button button-primary" onClick={() => go("internal-new")}><Plus size={16}/> Novo chamado</button>}
             {(membership.role === "administrative" || canApprove) && <button className="button button-secondary" onClick={exportReport}>Relatórios CSV</button>}
             {canApprove && <button className="button button-secondary" onClick={() => go("financial")}>Painel financeiro</button>}
+            {["admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => go("comparative-financial")}>Comparativo entre lojas</button>}
             {canManageUsers && <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>}
             <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button>
           </div></div>
@@ -573,6 +612,15 @@ function App() {
         </div>
         <section className="panel financial-history"><div className="queue-heading"><div><span className="section-index">ARQUIVO AUTOMÁTICO</span><h3>Relatórios mensais encerrados</h3></div></div>{monthlyPeriods.filter(x=>x.closed_at && x.report_data).length ? monthlyPeriods.filter(x=>x.closed_at && x.report_data).map(period=><div className="financial-history-row" key={period.id}><div><b>{formatMonth(period.period_start)}</b><small>{period.report_data.summary?.ticket_count || 0} chamados · custo realizado {money(period.report_data.summary?.actual_total)}</small></div><button className="button button-secondary" onClick={()=>exportMonthlyReport(period)}>Baixar relatório CSV</button></div>) : <p className="muted">Nenhum mês encerrado foi arquivado ainda.</p>}</section>
         <p className="financial-footnote">Os totais consideram os valores preenchidos nos chamados desta unidade. O relatório mensal é um retrato dos chamados abertos no período, preservado no banco após o fechamento.</p>
+      </section>}
+      {page === "comparative-financial" && session && membership && ["admin","management"].includes(membership.role) && <section className="dashboard">
+        <div className="dash-heading"><div><div className="eyebrow">INTELIGÊNCIA FINANCEIRA</div><h1>Comparativo entre lojas</h1><p>Consolidação das unidades 082, 188 e 232</p></div><div className="dash-actions"><select className="financial-period" value={comparisonPeriod} onChange={e=>setComparisonPeriod(e.target.value)}><option value="month">Mês atual</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="year">Ano atual</option><option value="all">Todo o histórico</option></select><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar à fila</button><button className="button button-secondary" onClick={() => exportComparisonCsv(comparisonRows)}>Exportar CSV</button></div></div>
+        <section className="panel financial-panel"><div className="queue-heading"><div><span className="section-index">CONSOLIDADO DAS UNIDADES</span><h3>Resultado financeiro</h3></div><button className="button button-secondary" onClick={loadComparisonData} disabled={busy}><RefreshCw size={15}/> Atualizar dados</button></div>
+          <div className="financial-kpis"><article className="financial-kpi"><span>Orçamento solicitado</span><strong>{money(comparisonTotals.requested)}</strong></article><article className="financial-kpi"><span>Valor aprovado</span><strong>{money(comparisonTotals.approved)}</strong></article><article className="financial-kpi"><span>Custo realizado</span><strong>{money(comparisonTotals.actual)}</strong></article><article className="financial-kpi"><span>Chamados no período</span><strong>{comparisonTotals.count}</strong></article></div>
+        </section>
+        <section className="panel financial-breakdown"><span className="section-index">RANKING POR CUSTO REALIZADO</span><h3>Despesas por unidade</h3>{comparisonRows.map((x,i)=><div className="financial-breakdown-row" key={x.store.id}><div><b>{i+1}. Loja {x.store.code} · {x.store.name}</b><small>{x.count} chamados · solicitado {money(x.requested)} · aprovado {money(x.approved)} · meta {money(x.goal)}</small></div><strong>{money(x.actual)}</strong></div>)}</section>
+        <section className="panel financial-breakdown"><span className="section-index">CONTROLE DE METAS</span><h3>Realização mensal por unidade</h3>{comparisonRows.map(x=><div className="financial-breakdown-row" key={x.store.id}><div><b>Loja {x.store.code} · {x.store.name}</b><small>{money(x.actual)} de {money(x.goal)} · {x.goal>0?(x.actual/x.goal*100).toLocaleString("pt-BR",{maximumFractionDigits:1})+"% da meta":"Meta não definida"}</small><div className="monthly-goal-track"><div style={{width:(x.goal>0?Math.min(100,x.actual/x.goal*100):0)+"%"}}/></div></div><strong>{money(x.actual-x.goal)}</strong></div>)}</section>
+        <p className="financial-footnote">Os valores consideram os chamados não excluídos das três unidades. O comparativo usa os registros financeiros dos chamados e as metas cadastradas para o mês atual.</p>
       </section>}
       {page === "internal-new" && session && membership && canCreateInternal && <section className="panel form-panel page-panel">
         <div className="panel-heading"><div><span className="section-index">REGISTRO INTERNO</span><h3>Novo chamado</h3></div><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar</button></div>
