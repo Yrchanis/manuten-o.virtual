@@ -19,6 +19,30 @@ const statusLabels = {
 };
 const priorityLabels = { low: "Baixa", normal: "Normal", high: "Alta", critical: "Crítica" };
 const roleLabels = { admin: "ADMIN", management: "Gerência", leader: "Gerência", maintenance: "Manutenção", maintenance_assistant: "Auxiliar de manutenção", administrative: "Administrativo" };
+const ageBands = [
+  { max: 3, label: "Bom", level: "good" },
+  { max: 7, label: "Regular", level: "regular" },
+  { max: 10, label: "Irregular", level: "irregular" },
+  { max: 15, label: "Ruim", level: "bad" },
+  { max: 30, label: "Péssimo", level: "awful" },
+  { max: Infinity, label: "Crítico", level: "critical" }
+];
+function ticketAge(ticket) {
+  const terminal = ["resolved", "closed_unresolved", "cancelled"].includes(ticket.status);
+  const endValue = terminal
+    ? (ticket.resolved_at || ticket.closed_at || ticket.updated_at || new Date().toISOString())
+    : new Date().toISOString();
+  const dayNumber = (value) => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date(value));
+    const get = (type) => Number(parts.find(part => part.type === type)?.value);
+    return Math.floor(Date.UTC(get("year"), get("month") - 1, get("day")) / 86400000);
+  };
+  const days = Math.max(0, dayNumber(endValue) - dayNumber(ticket.opened_at));
+  const band = ageBands.find(item => days <= item.max) || ageBands[ageBands.length - 1];
+  return { days, ...band, terminal };
+}
 const roleOptions = ["maintenance","maintenance_assistant","administrative","management","admin"];
 
 async function publicApi(payload) {
@@ -416,7 +440,7 @@ function App() {
             <button type="button" role="tab" aria-selected={queueTab === "resolved"} className={queueTab === "resolved" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("resolved"); setExpandedTicket(""); }}>Resolvidos <span>{queueCounts.resolved}</span></button>
             <button type="button" role="tab" aria-selected={queueTab === "closed"} className={queueTab === "closed" ? "queue-tab active" : "queue-tab"} onClick={() => { setQueueTab("closed"); setExpandedTicket(""); }}>Encerrados / cancelados <span>{queueCounts.closed}</span></button>
           </div>
-          <div className="ticket-list">{visibleTickets.length ? visibleTickets.map(t => <article className="ticket-row" key={t.id}><div className="ticket-row-head"><div className="ticket-main"><span className="ticket-protocol">{t.protocol}</span><h4>{t.title}</h4><p>{t.location} · {t.requester_name}</p>{t.approval_status === "approved" && t.approval_note?.split("\n").find(line => line.startsWith("Aprovado por:")) && <p className="approval-attribution">{t.approval_note.split("\n").find(line => line.startsWith("Aprovado por:"))}</p>}</div><div className="ticket-tags"><Priority value={t.priority}/><Status value={t.status}/></div><div className="ticket-date">{new Date(t.opened_at).toLocaleDateString("pt-BR")}</div>
+          <div className="ticket-list">{visibleTickets.length ? visibleTickets.map(t => <article className="ticket-row" key={t.id}><div className="ticket-row-head"><div className="ticket-main"><span className="ticket-protocol">{t.protocol}</span><h4>{t.title}</h4><p>{t.location} · {t.requester_name}</p>{t.approval_status === "approved" && t.approval_note?.split("\n").find(line => line.startsWith("Aprovado por:")) && <p className="approval-attribution">{t.approval_note.split("\n").find(line => line.startsWith("Aprovado por:"))}</p>}</div><div className="ticket-tags"><Priority value={t.priority}/><Status value={t.status}/>{(() => { const age = ticketAge(t); return <div className={`ticket-age age-${age.level}`} title={age.terminal ? "Tempo total até o encerramento" : "Tempo desde a abertura"}><strong>{age.label}</strong><small>{age.days} {age.days === 1 ? "dia" : "dias"}</small></div>; })()}</div><div className="ticket-date">{new Date(t.opened_at).toLocaleDateString("pt-BR")}</div>
               <button className="button button-secondary ticket-manage" onClick={() => setExpandedTicket(expandedTicket === t.id ? "" : t.id)}>{expandedTicket === t.id ? "Fechar" : "Ações"}</button></div>
               {expandedTicket === t.id && <div className="ticket-actions">
                 <div className="ticket-financials"><span>Orçamento: {t.estimated_budget == null ? "—" : Number(t.estimated_budget).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Custo: {t.actual_cost == null ? "—" : Number(t.actual_cost).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Aprovação: {({not_required:"Não solicitada",pending:"Pendente",approved:"Aprovada",rejected:"Reprovada"})[t.approval_status] || "—"}</span>{t.is_incorrect && <span className="warning-text">Abertura incorreta</span>}</div>
