@@ -98,6 +98,7 @@ function App() {
   const [ticketAttachments, setTicketAttachments] = useState({});
   const [attachmentLoading, setAttachmentLoading] = useState("");
   const [queueTab, setQueueTab] = useState("active");
+  const [financialPeriod, setFinancialPeriod] = useState("all");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [form, setForm] = useState({
@@ -343,6 +344,37 @@ function App() {
     active: tickets.filter(t => ["in_progress","waiting_material","waiting_third_party","waiting_third_party_budget","waiting_coordinator_approval","waiting_matrix_approval"].includes(t.status)).length,
     resolved: tickets.filter(t => t.status === "resolved").length
   }), [tickets]);
+  const financialTickets = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (financialPeriod === "30") start.setDate(now.getDate() - 30);
+    if (financialPeriod === "90") start.setDate(now.getDate() - 90);
+    if (financialPeriod === "year") start.setMonth(0, 1);
+    return tickets.filter(t => financialPeriod === "all" || new Date(t.opened_at) >= start);
+  }, [tickets, financialPeriod]);
+  const financialSummary = useMemo(() => {
+    const sum = key => financialTickets.reduce((total, t) => total + (Number(t[key]) || 0), 0);
+    const requested = sum("estimated_budget"), approved = sum("approved_budget"), actual = sum("actual_cost");
+    const group = key => {
+      const map = new Map();
+      financialTickets.forEach(t => {
+        const id = t[key] || "none";
+        const label = key === "sector_id" ? sectors.find(x => x.id === id)?.name : categories.find(x => x.id === id)?.name;
+        const name = label || (id === "none" ? "Não informado" : "Sem classificação");
+        const item = map.get(name) || { name, requested: 0, approved: 0, actual: 0, count: 0 };
+        item.requested += Number(t.estimated_budget) || 0;
+        item.approved += Number(t.approved_budget) || 0;
+        item.actual += Number(t.actual_cost) || 0;
+        item.count += 1; map.set(name, item);
+      });
+      return [...map.values()].sort((a,b) => b.actual-a.actual || b.requested-a.requested);
+    };
+    return { requested, approved, actual, balance: approved-actual,
+      pending: financialTickets.filter(t => ["waiting_coordinator_approval","waiting_matrix_approval"].includes(t.status)).length,
+      overrun: financialTickets.filter(t => t.approved_budget != null && t.actual_cost != null && Number(t.actual_cost)>Number(t.approved_budget)).length,
+      sector: group("sector_id"), category: group("category_id") };
+  }, [financialTickets, sectors, categories]);
+  const money = value => Number(value || 0).toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
 
   const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); };
   const publicPage = ["new","track"].includes(page);
@@ -428,6 +460,7 @@ function App() {
         <div className="dash-heading"><div><div className="eyebrow">VISÃO OPERACIONAL</div><h1>Painel de manutenção</h1><p>{membership.stores?.name || "Unidade"} · {roleLabels[membership.role] || membership.role}</p></div><div className="dash-actions">
             {canCreateInternal && <button className="button button-primary" onClick={() => go("internal-new")}><Plus size={16}/> Novo chamado</button>}
             {(membership.role === "administrative" || canApprove) && <button className="button button-secondary" onClick={exportReport}>Relatórios CSV</button>}
+            {canApprove && <button className="button button-secondary" onClick={() => go("financial")}>Painel financeiro</button>}
             {canManageUsers && <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>}
             <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button>
           </div></div>
@@ -465,6 +498,24 @@ function App() {
               </div>}
             </article>) : <div className="empty-state"><ClipboardList size={26}/><strong>Nenhum chamado encontrado</strong><span>Os registros aparecerão aqui quando forem abertos.</span></div>}</div>
         </section>
+      </section>}
+      {page === "financial" && session && membership && canApprove && <section className="dashboard">
+        <div className="dash-heading"><div><div className="eyebrow">CONTROLE DE DESPESAS</div><h1>Painel financeiro</h1><p>{membership.stores?.name || "Unidade"} · valores dos chamados registrados</p></div><div className="dash-actions"><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar à fila</button><button className="button button-secondary" onClick={exportReport}>Exportar CSV</button></div></div>
+        <section className="panel financial-panel">
+          <div className="queue-heading"><div><span className="section-index">PERÍODO DE ANÁLISE</span><h3>Resumo financeiro</h3></div><select className="financial-period" value={financialPeriod} onChange={e=>setFinancialPeriod(e.target.value)}><option value="all">Todo o histórico</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="month">Mês atual</option><option value="year">Ano atual</option></select></div>
+          <div className="financial-kpis">
+            <article className="financial-kpi"><span>Orçamento solicitado</span><strong>{money(financialSummary.requested)}</strong></article>
+            <article className="financial-kpi"><span>Valor aprovado</span><strong>{money(financialSummary.approved)}</strong></article>
+            <article className="financial-kpi"><span>Custo realizado</span><strong>{money(financialSummary.actual)}</strong></article>
+            <article className="financial-kpi"><span>Saldo aprovado</span><strong className={financialSummary.balance < 0 ? "warning-text" : "financial-positive"}>{money(financialSummary.balance)}</strong></article>
+          </div>
+          <div className="financial-alerts"><span><b>{financialSummary.pending}</b> chamados aguardando aprovação</span><span><b>{financialSummary.overrun}</b> chamados acima do valor aprovado</span><span><b>{financialTickets.length}</b> chamados no período</span></div>
+        </section>
+        <div className="financial-breakdown-grid">
+          <section className="panel financial-breakdown"><span className="section-index">DISTRIBUIÇÃO</span><h3>Por setor</h3>{financialSummary.sector.length ? financialSummary.sector.map(x=><div className="financial-breakdown-row" key={x.name}><div><b>{x.name}</b><small>{x.count} chamados · solicitado {money(x.requested)} · aprovado {money(x.approved)}</small></div><strong>{money(x.actual)}</strong></div>) : <p className="muted">Sem registros no período.</p>}</section>
+          <section className="panel financial-breakdown"><span className="section-index">DISTRIBUIÇÃO</span><h3>Por categoria</h3>{financialSummary.category.length ? financialSummary.category.map(x=><div className="financial-breakdown-row" key={x.name}><div><b>{x.name}</b><small>{x.count} chamados · solicitado {money(x.requested)} · aprovado {money(x.approved)}</small></div><strong>{money(x.actual)}</strong></div>) : <p className="muted">Sem registros no período.</p>}</section>
+        </div>
+        <p className="financial-footnote">Os totais consideram os valores preenchidos nos chamados desta unidade. Registros sem valor financeiro permanecem na contagem, mas não alteram as somas.</p>
       </section>}
       {page === "internal-new" && session && membership && canCreateInternal && <section className="panel form-panel page-panel">
         <div className="panel-heading"><div><span className="section-index">REGISTRO INTERNO</span><h3>Novo chamado</h3></div><button className="button button-secondary" onClick={() => go("dashboard")}>Voltar</button></div>
