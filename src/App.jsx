@@ -367,7 +367,7 @@ function App() {
         <form onSubmit={saveUser}>
           <div className="form-grid">
             <Field label="Nome completo"><input required minLength="3" value={userForm.display_name} onChange={e=>setUserForm(f=>({...f,display_name:e.target.value}))}/></Field>
-            <Field label="Matrícula / usuário"><input required inputMode="numeric" maxLength="7" value={userForm.employee_number} onChange={e=>setUserForm(f=>({...f,employee_number:e.target.value.replace(/\\D/g,"").slice(0,12)}))}/></Field>
+            <Field label="Matrícula / usuário"><input required inputMode="numeric" maxLength="7" value={userForm.employee_number} onChange={e=>setUserForm(f=>({...f,employee_number:e.target.value.replace(/\D/g,"").slice(0,7)}))}/></Field>
             <Field label="Perfil"><select value={userForm.role} onChange={e=>setUserForm(f=>({...f,role:e.target.value}))}>{roleOptions.filter(r=>membership.role==="admin" || !["admin","management"].includes(r)).map(r=><option key={r} value={r}>{roleLabels[r]}</option>)}</select></Field>
           </div>
           <div className="form-footer"><span>{userForm.user_id ? "Editando usuário existente" : "Uma senha provisória será gerada automaticamente."}</span><div className="form-actions">{userForm.user_id && <button type="button" className="button button-secondary" onClick={()=>setUserForm({user_id:"",display_name:"",employee_number:"",role:"maintenance"})}>Cancelar edição</button>}<button className="button button-primary" disabled={busy}>{userForm.user_id ? "Salvar alterações" : "Criar usuário"} <ArrowRight size={16}/></button></div></div>
