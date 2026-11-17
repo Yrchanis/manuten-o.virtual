@@ -41,3 +41,20 @@
 .user-row span{font-size:10px;color:var(--muted)}
 .user-temp{margin:18px 0;justify-content:space-between;align-items:flex-start}
 @media(max-width:680px){.dash-actions{justify-content:flex-end}.page-panel{margin:26px 0;padding:22px 17px}.ticket-actions .field{max-width:none;width:100%}.ticket-actions{align-items:stretch}.ticket-actions .button{flex:1}.user-row{align-items:flex-start}.user-row .button{padding:9px}}
+
+
+/* Ajustes de leitura da fila */
+.ticket-row{display:block;padding:17px 0}
+.ticket-row-head{display:flex;align-items:center;gap:18px;min-width:0}
+.ticket-main{flex:1 1 320px;min-width:250px}
+.ticket-protocol{display:inline-block;white-space:nowrap;font-size:14px;font-weight:700;letter-spacing:.15px;line-height:1.5}
+.ticket-main h4{font-size:14px;line-height:1.4}
+.ticket-actions{width:100%;margin-top:12px}
+@media(max-width:680px){
+  .ticket-row-head{display:flex;flex-wrap:wrap;gap:9px}
+  .ticket-main{flex:1 1 100%;min-width:0}
+  .ticket-protocol{font-size:13px}
+  .ticket-tags{order:initial;width:auto}
+  .ticket-date{margin-left:auto}
+  .ticket-manage{margin-left:0}
+}
