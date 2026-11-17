@@ -164,9 +164,9 @@ function App() {
       <div className="topbar-inner">
         <Brand />
         <div className="topbar-right">
-          {selectedStore && <button className="login-link" onClick={() => { setPage("select-store"); setMembership(null); setTickets([]); setError(""); }}><Building2 size={15}/> {selectedStore.code} · Trocar loja</button>}
-          {session?.user && membership ? <><span className="user-chip"><span className="online-dot" />{profile?.display_name || session.user.email}</span><button className="icon-button" onClick={signOut} title="Sair"><LogOut size={17}/></button></> :
-            <button className="login-link" onClick={() => go("login")}><LockKeyhole size={15}/> Acesso da equipe</button>}
+          {selectedStore && <button className="login-link" onClick={() => { setPage("select-store"); setStoreId(""); setMembership(null); setTickets([]); setError(""); }}><Building2 size={15}/> {selectedStore.code} · Trocar loja</button>}
+          {selectedStore && (session?.user && membership ? <><span className="user-chip"><span className="online-dot" />{profile?.display_name || session.user.email}</span><button className="icon-button" onClick={signOut} title="Sair"><LogOut size={17}/></button></> :
+            <button className="login-link" onClick={() => go("login")}><LockKeyhole size={15}/> Acesso da equipe</button>)}
         </div>
       </div>
     </header>
