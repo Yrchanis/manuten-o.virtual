@@ -90,6 +90,10 @@ function App() {
   const [tickets, setTickets] = useState([]);
   const [staffUsers, setStaffUsers] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [preventivePlans, setPreventivePlans] = useState([]);
+  const [preventiveExecutions, setPreventiveExecutions] = useState([]);
+  const [preventiveForm, setPreventiveForm] = useState({ id:"", title:"", asset_name:"", sector_id:"", location:"", description:"", frequency_days:"30", next_due_on:new Date().toLocaleDateString("en-CA"), active:true });
+  const [executionForms, setExecutionForms] = useState({});
   const [vendorForm, setVendorForm] = useState({ id:"", name:"", service_type:"", contact_name:"", phone:"", email:"", notes:"" });
   const [userForm, setUserForm] = useState({ user_id: "", display_name: "", employee_number: "", role: "maintenance" });
   const [userResult, setUserResult] = useState(null);
@@ -149,6 +153,7 @@ function App() {
       await loadTickets(memberships[0].store_id);
       await loadMonthlyPeriods(memberships[0].store_id);
       await loadVendors(memberships[0].store_id);
+      await loadPreventive(memberships[0].store_id);
     } catch (e) { setError(e.message || "Falha ao carregar o painel."); }
     finally { setBusy(false); }
   }
@@ -216,6 +221,58 @@ function App() {
       setNotice(vendor.active ? "Empresa desativada. O histórico dos chamados foi preservado." : "Empresa reativada.");
     } catch (e) { setError(e.message || "Não foi possível alterar a empresa."); }
     finally { setBusy(false); }
+  }
+  async function loadPreventive(id = membership?.store_id) {
+    if (!id || !supabase) return;
+    const [{ data: plans, error: planError }, { data: logs, error: logError }] = await Promise.all([
+      supabase.from("preventive_maintenance_plans").select("*").eq("store_id", id).order("next_due_on", { ascending:true }),
+      supabase.from("preventive_maintenance_executions").select("*").eq("store_id", id).order("executed_at", { ascending:false }).limit(100)
+    ]);
+    if (planError) throw planError;
+    if (logError) throw logError;
+    setPreventivePlans(plans || []); setPreventiveExecutions(logs || []);
+  }
+  async function savePreventivePlan(e) {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      if (!["admin","management"].includes(membership?.role)) throw new Error("Somente ADMIN e Gerência podem cadastrar planos preventivos.");
+      const payload = { store_id:storeId, title:preventiveForm.title.trim(), asset_name:preventiveForm.asset_name.trim()||null, sector_id:preventiveForm.sector_id||null, location:preventiveForm.location.trim(), description:preventiveForm.description.trim()||null, frequency_days:Number(preventiveForm.frequency_days), next_due_on:preventiveForm.next_due_on, updated_at:new Date().toISOString() };
+      if (!Number.isInteger(payload.frequency_days) || payload.frequency_days<1 || payload.frequency_days>3650) throw new Error("Periodicidade deve ser entre 1 e 3650 dias.");
+      if (preventiveForm.id) {
+        const {error:updateError}=await supabase.from("preventive_maintenance_plans").update(payload).eq("id",preventiveForm.id).eq("store_id",storeId);
+        if(updateError) throw updateError; setNotice("Plano preventivo atualizado.");
+      } else {
+        const {error:insertError}=await supabase.from("preventive_maintenance_plans").insert({...payload,created_by:session.user.id});
+        if(insertError) throw insertError; setNotice("Plano preventivo cadastrado.");
+      }
+      setPreventiveForm({id:"",title:"",asset_name:"",sector_id:"",location:"",description:"",frequency_days:"30",next_due_on:new Date().toLocaleDateString("en-CA"),active:true});
+      await loadPreventive();
+    } catch(err){setError(err.message||"Não foi possível salvar o plano.");} finally{setBusy(false);}
+  }
+  async function togglePreventivePlan(plan) {
+    setBusy(true); setError("");
+    try {
+      const {error:updateError}=await supabase.from("preventive_maintenance_plans").update({active:!plan.active,updated_at:new Date().toISOString()}).eq("id",plan.id).eq("store_id",storeId);
+      if(updateError) throw updateError; await loadPreventive(); setNotice(plan.active?"Plano preventivo suspenso.":"Plano preventivo reativado.");
+    } catch(err){setError(err.message||"Não foi possível alterar o plano.");} finally{setBusy(false);}
+  }
+  async function recordPreventiveExecution(plan) {
+    const form=executionForms[plan.id]||{result:"completed",notes:""};
+    setBusy(true); setError("");
+    try {
+      const today=new Date().toLocaleDateString("en-CA");
+      const next=new Date(today+"T12:00:00Z");
+      if(form.result==="completed") next.setUTCDate(next.getUTCDate()+Number(plan.frequency_days));
+      const nextDue=form.result==="completed"?next.toISOString().slice(0,10):plan.next_due_on;
+      const {error:insertError}=await supabase.from("preventive_maintenance_executions").insert({store_id:storeId,plan_id:plan.id,scheduled_for:plan.next_due_on,executed_by:session.user.id,result:form.result,notes:String(form.notes||"").trim()||null,next_due_on:nextDue});
+      if(insertError) throw insertError;
+      if(form.result==="completed"){
+        const {error:updateError}=await supabase.from("preventive_maintenance_plans").update({next_due_on:nextDue,updated_at:new Date().toISOString()}).eq("id",plan.id).eq("store_id",storeId);
+        if(updateError) throw updateError;
+      }
+      setNotice(form.result==="completed"?"Manutenção registrada. Próximo ciclo programado.":"Execução registrada sem alterar o vencimento.");
+      setExecutionForms(v=>({...v,[plan.id]:{result:"completed",notes:""}})); await loadPreventive();
+    } catch(err){setError(err.message||"Não foi possível registrar a execução.");} finally{setBusy(false);}
   }
   async function loadMonthlyPeriods(id = membership?.store_id) {
     if (!id || !supabase) return;
@@ -505,7 +562,7 @@ function App() {
   }).sort((a,b)=>b.actual-a.actual),[stores,comparisonFilteredTickets,comparisonPeriods,currentMonthKey]);
   const comparisonTotals=comparisonRows.reduce((a,x)=>({count:a.count+x.count,requested:a.requested+x.requested,approved:a.approved+x.approved,actual:a.actual+x.actual}),{count:0,requested:0,approved:0,actual:0});
 
-  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); if (target === "comparative-financial") loadComparisonData(); if (target === "vendors") loadVendors(); };
+  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); if (target === "comparative-financial") loadComparisonData(); if (target === "vendors") loadVendors(); if (target === "preventive") loadPreventive(); };
   const publicPage = ["new","track"].includes(page);
   const selectedStore = stores.find(s => s.id === storeId);
   const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user?.user_metadata?.must_change_password === true ? "change-password" : session?.user ? "dashboard" : "new"); };
@@ -593,6 +650,7 @@ function App() {
             {["admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => go("comparative-financial")}>Comparativo entre lojas</button>}
             {canManageUsers && <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>}
             {canManageUsers && <button className="button button-secondary" onClick={() => go("vendors")}>Empresas terceirizadas</button>}
+            <button className="button button-secondary" onClick={() => go("preventive")}>Manutenção preventiva</button>
             <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button>
           </div></div>
         <div className="stat-grid"><div className="stat-card"><span>Chamados registrados</span><strong>{stats.total}</strong><ClipboardList size={20}/></div><div className="stat-card stat-open"><span>Abertos</span><strong>{stats.open}</strong><Ticket size={20}/></div><div className="stat-card stat-active"><span>Em andamento / espera</span><strong>{stats.active}</strong><Activity size={20}/></div><div className="stat-card stat-done"><span>Resolvidos</span><strong>{stats.resolved}</strong><CheckCircle2 size={20}/></div></div>
@@ -679,6 +737,30 @@ function App() {
           </div>
           <div className="form-footer"><span>Chamados do perfil Administrativo recebem prioridade alta automaticamente.</span><button className="button button-primary" disabled={busy}>Registrar chamado <ArrowRight size={16}/></button></div>
         </form>
+      </section>}
+      {page === "preventive" && session && membership && <section className="dashboard">
+        <div className="dash-heading"><div><div className="eyebrow">ROTINA E CONFIABILIDADE</div><h1>Manutenção preventiva</h1><p>{membership.stores?.name || "Unidade"} · planos, vencimentos e execução</p></div><div className="dash-actions"><button className="button button-secondary" onClick={()=>go("dashboard")}>Voltar à fila</button><button className="button button-secondary" onClick={()=>loadPreventive()} disabled={busy}><RefreshCw size={15}/> Atualizar</button></div></div>
+        <div className="financial-kpis"><article className="financial-kpi"><span>Planos ativos</span><strong>{preventivePlans.filter(p=>p.active).length}</strong></article><article className="financial-kpi"><span>Atrasados</span><strong>{preventivePlans.filter(p=>p.active&&p.next_due_on<new Date().toLocaleDateString("en-CA")).length}</strong></article><article className="financial-kpi"><span>Vencem em 7 dias</span><strong>{preventivePlans.filter(p=>p.active&&p.next_due_on>=new Date().toLocaleDateString("en-CA")&&p.next_due_on<=new Date(Date.now()+7*86400000).toLocaleDateString("en-CA")).length}</strong></article><article className="financial-kpi"><span>Execuções registradas</span><strong>{preventiveExecutions.length}</strong></article></div>
+        {canManageUsers && <section className="panel form-panel"><div className="panel-heading"><div><span className="section-index">PLANEJAMENTO</span><h3>{preventiveForm.id?"Editar plano":"Novo plano preventivo"}</h3></div></div>
+          <form onSubmit={savePreventivePlan}><div className="form-grid">
+            <Field label="Serviço preventivo *"><input required minLength="4" maxLength="140" value={preventiveForm.title} onChange={e=>setPreventiveForm(v=>({...v,title:e.target.value}))} placeholder="Ex.: Inspeção de quadro elétrico"/></Field>
+            <Field label="Equipamento / estrutura"><input maxLength="140" value={preventiveForm.asset_name} onChange={e=>setPreventiveForm(v=>({...v,asset_name:e.target.value}))} placeholder="Ex.: Câmara fria 01, gerador"/></Field>
+            <Field label="Setor"><select value={preventiveForm.sector_id} onChange={e=>setPreventiveForm(v=>({...v,sector_id:e.target.value}))}><option value="">Selecione</option>{sectors.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+            <Field label="Local exato *"><input required minLength="2" maxLength="160" value={preventiveForm.location} onChange={e=>setPreventiveForm(v=>({...v,location:e.target.value}))}/></Field>
+            <Field label="Periodicidade (dias) *"><input type="number" min="1" max="3650" required value={preventiveForm.frequency_days} onChange={e=>setPreventiveForm(v=>({...v,frequency_days:e.target.value}))}/></Field>
+            <Field label="Próxima execução *"><input type="date" required value={preventiveForm.next_due_on} onChange={e=>setPreventiveForm(v=>({...v,next_due_on:e.target.value}))}/></Field>
+            <div className="span-2"><Field label="Descrição / procedimento"><textarea rows="3" maxLength="2000" value={preventiveForm.description} onChange={e=>setPreventiveForm(v=>({...v,description:e.target.value}))} placeholder="Descreva o que deve ser inspecionado ou executado."/></Field></div>
+          </div><div className="form-footer"><span>Cadastro e edição restritos a ADMIN e Gerência.</span><div className="form-actions">{preventiveForm.id&&<button type="button" className="button button-secondary" onClick={()=>setPreventiveForm({id:"",title:"",asset_name:"",sector_id:"",location:"",description:"",frequency_days:"30",next_due_on:new Date().toLocaleDateString("en-CA"),active:true})}>Cancelar</button>}<button className="button button-primary" disabled={busy}>{preventiveForm.id?"Salvar plano":"Cadastrar plano"} <ArrowRight size={16}/></button></div></div></form>
+        </section>}
+        <section className="panel financial-breakdown"><span className="section-index">AGENDA PREVENTIVA</span><h3>Planos e próximas execuções</h3>
+          {preventivePlans.filter(p=>p.active).length?preventivePlans.filter(p=>p.active).map(plan=>{const today=new Date().toLocaleDateString("en-CA");const late=plan.next_due_on<today;const days=Math.ceil((new Date(plan.next_due_on+"T12:00:00")-new Date(today+"T12:00:00"))/86400000);const sector=sectors.find(s=>s.id===plan.sector_id)?.name||"Setor não definido";return <article className="preventive-plan-row" key={plan.id}>
+            <div className="queue-heading"><div><b>{plan.title}</b><small>{plan.asset_name||"Equipamento não informado"} · {sector} · {plan.location}</small></div><strong className={late?"warning-text":""}>{late?"Atrasado":days===0?"Vence hoje":"Em "+days+" dias"} · {new Date(plan.next_due_on+"T12:00:00").toLocaleDateString("pt-BR")}</strong></div>
+            {plan.description&&<p>{plan.description}</p>}<small>Periodicidade: a cada {plan.frequency_days} dias</small>
+            {["admin","management","maintenance","maintenance_assistant"].includes(membership.role)&&<div className="preventive-execution-form"><Field label="Resultado"><select value={(executionForms[plan.id]?.result)||"completed"} onChange={e=>setExecutionForms(v=>({...v,[plan.id]:{...(v[plan.id]||{}),result:e.target.value}}))}><option value="completed">Concluída</option><option value="partial">Parcial — manter vencimento</option><option value="not_done">Não executada — manter vencimento</option></select></Field><Field label="Observações da execução"><input value={(executionForms[plan.id]?.notes)||""} onChange={e=>setExecutionForms(v=>({...v,[plan.id]:{...(v[plan.id]||{}),notes:e.target.value}}))} placeholder="Serviço realizado, anomalias encontradas..."/></Field><button className="button button-primary" disabled={busy} onClick={()=>recordPreventiveExecution(plan)}>Registrar execução</button></div>}
+            {canManageUsers&&<div className="form-actions"><button className="button button-secondary" onClick={()=>setPreventiveForm({id:plan.id,title:plan.title,asset_name:plan.asset_name||"",sector_id:plan.sector_id||"",location:plan.location,description:plan.description||"",frequency_days:String(plan.frequency_days),next_due_on:plan.next_due_on,active:plan.active})}>Editar</button><button className="button button-secondary" onClick={()=>togglePreventivePlan(plan)} disabled={busy}>Suspender plano</button></div>}
+          </article>}) : <p className="muted">Nenhum plano preventivo ativo nesta unidade.</p>}
+        </section>
+        <section className="panel financial-history"><div className="queue-heading"><div><span className="section-index">RASTREABILIDADE</span><h3>Histórico de execuções</h3></div></div>{preventiveExecutions.length?preventiveExecutions.map(log=>{const plan=preventivePlans.find(p=>p.id===log.plan_id);return <div className="financial-history-row" key={log.id}><div><b>{plan?.title||"Plano preventivo"}</b><small>{new Date(log.executed_at).toLocaleString("pt-BR")} · {log.result==="completed"?"Concluída":log.result==="partial"?"Parcial":"Não executada"} · Próximo vencimento: {new Date(log.next_due_on+"T12:00:00").toLocaleDateString("pt-BR")}{log.notes?" · "+log.notes:""}</small></div></div>}) : <p className="muted">Nenhuma execução registrada.</p>}</section>
       </section>}
       {page === "vendors" && session && membership && canManageUsers && <section className="panel form-panel page-panel">
         <div className="panel-heading"><div><span className="section-index">CADASTRO DE PRESTADORES</span><h3>Empresas terceirizadas</h3></div><button className="button button-secondary" onClick={()=>go("dashboard")}>Voltar à fila</button></div>
