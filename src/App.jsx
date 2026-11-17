@@ -69,6 +69,8 @@ function App() {
   const [userResult, setUserResult] = useState(null);
   const [internalForm, setInternalForm] = useState({ requester_name: "", requester_contact: "", sector_id: "", category_id: "", location: "", title: "", description: "" });
   const [expandedTicket, setExpandedTicket] = useState("");
+  const [ticketHistory, setTicketHistory] = useState({});
+  const [historyLoading, setHistoryLoading] = useState("");
   const [queueTab, setQueueTab] = useState("active");
   const [search, setSearch] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -166,6 +168,22 @@ function App() {
       setPage("dashboard");
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
+  }
+  async function loadTicketHistory(ticketId) {
+    if (ticketHistory[ticketId]) return;
+    setHistoryLoading(ticketId);
+    try {
+      const { data, error: historyError } = await supabase.from("ticket_updates").select("id,author_id,update_type,old_status,new_status,message,is_internal,created_at").eq("ticket_id", ticketId).eq("store_id", storeId).order("created_at", { ascending: false }).limit(100);
+      if (historyError) throw historyError;
+      const authorIds = [...new Set((data || []).map(x => x.author_id).filter(Boolean))];
+      let authors = {};
+      if (authorIds.length) {
+        const { data: profilesData } = await supabase.from("profiles").select("id,display_name").in("id", authorIds);
+        authors = Object.fromEntries((profilesData || []).map(x => [x.id, x.display_name]));
+      }
+      setTicketHistory(prev => ({ ...prev, [ticketId]: (data || []).map(x => ({ ...x, author_name: authors[x.author_id] || (x.author_id ? "Equipe da unidade" : "Sistema") })) }));
+    } catch (e) { setError(e.message || "Não foi possível carregar o histórico."); }
+    finally { setHistoryLoading(""); }
   }
   async function runOps(payload) {
     setBusy(true); setError("");
@@ -362,6 +380,8 @@ function App() {
                 {canApprove && t.approval_status === "pending" && <><button className="button button-primary" onClick={() => runOps({action:"decide_approval",ticket_id:t.id,decision:"approved"})}>Aprovar execução</button><button className="button button-secondary" onClick={() => { const note = window.prompt("Motivo da reprovação:"); if (note) runOps({action:"decide_approval",ticket_id:t.id,decision:"rejected",note}); }}>Reprovar</button></>}
                 {["maintenance","maintenance_assistant","administrative","admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const v = window.prompt("Orçamento previsto (R$):", t.estimated_budget ?? ""); if (v !== null) runOps({action:"set_financials",ticket_id:t.id,estimated_budget:v}); }}>Informar orçamento</button>}
                 {["administrative","admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const v = window.prompt("Custo realizado (R$):", t.actual_cost ?? ""); if (v !== null) runOps({action:"set_financials",ticket_id:t.id,actual_cost:v}); }}>Informar custo</button>}
+                <button className="button button-secondary" onClick={() => loadTicketHistory(t.id)}>{historyLoading === t.id ? "Carregando histórico..." : ticketHistory[t.id] ? "Atualizar histórico" : "Ver histórico"}</button>
+                {ticketHistory[t.id] && <div className="ticket-history"><strong>Histórico do chamado</strong>{ticketHistory[t.id].length ? ticketHistory[t.id].map(item => <div className="history-entry" key={item.id}><div><b>{item.update_type === "status_change" ? "Mudança de status" : item.update_type === "approval_request" ? "Solicitação de aprovação" : item.update_type === "approval_decision" ? "Decisão de aprovação" : item.update_type === "cost_update" ? "Atualização financeira" : item.update_type === "ticket_deleted" ? "Exclusão" : "Registro"}</b><small>{item.author_name} · {new Date(item.created_at).toLocaleString("pt-BR")}</small></div><p>{item.message}</p>{item.old_status && item.new_status && <small>{statusLabels[item.old_status] || item.old_status} → {statusLabels[item.new_status] || item.new_status}</small>}</div>) : <p className="muted">Nenhum evento registrado.</p>}</div>}
                 {canDelete && <button className="button button-danger" onClick={() => { const reason = window.prompt("Motivo obrigatório para excluir o chamado:"); if (reason) runOps({action:"delete_ticket",ticket_id:t.id,reason}); }}>Excluir chamado</button>}
                 {["maintenance","maintenance_assistant","admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const reason = window.prompt("Explique por que a abertura está incorreta:"); if (reason) runOps({action:"mark_incorrect",ticket_id:t.id,reason}); }}>Marcar abertura incorreta</button>}
               </div>}
