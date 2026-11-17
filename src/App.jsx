@@ -170,7 +170,6 @@ function App() {
     finally { setBusy(false); }
   }
   async function loadTicketHistory(ticketId) {
-    if (ticketHistory[ticketId]) return;
     setHistoryLoading(ticketId);
     try {
       const { data, error: historyError } = await supabase.from("ticket_updates").select("id,author_id,update_type,old_status,new_status,message,is_internal,created_at").eq("ticket_id", ticketId).eq("store_id", storeId).order("created_at", { ascending: false }).limit(100);
