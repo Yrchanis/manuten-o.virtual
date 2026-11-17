@@ -89,6 +89,8 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [staffUsers, setStaffUsers] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [vendorForm, setVendorForm] = useState({ id:"", name:"", service_type:"", contact_name:"", phone:"", email:"", notes:"" });
   const [userForm, setUserForm] = useState({ user_id: "", display_name: "", employee_number: "", role: "maintenance" });
   const [userResult, setUserResult] = useState(null);
   const [internalForm, setInternalForm] = useState({ requester_name: "", requester_contact: "", sector_id: "", category_id: "", location: "", title: "", description: "" });
@@ -146,6 +148,7 @@ function App() {
       setMembership(memberships[0]); setProfile(p);
       await loadTickets(memberships[0].store_id);
       await loadMonthlyPeriods(memberships[0].store_id);
+      await loadVendors(memberships[0].store_id);
     } catch (e) { setError(e.message || "Falha ao carregar o painel."); }
     finally { setBusy(false); }
   }
@@ -175,6 +178,44 @@ function App() {
     const csv = [headers,...data].map(row => row.map(v => String(v ?? "").replace(/"/g,'""')).join(";")).join("\r\n");
     const blob = new Blob(["\ufeff"+csv], {type:"text/csv;charset=utf-8"});
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download="comparativo-financeiro-lojas.csv"; a.click(); URL.revokeObjectURL(url);
+  }
+  async function loadVendors(id = membership?.store_id) {
+    if (!id || !supabase) return;
+    const { data, error: queryError } = await supabase.from("maintenance_vendors")
+      .select("id,store_id,name,service_type,contact_name,phone,email,notes,active")
+      .eq("store_id", id).order("name", { ascending: true });
+    if (queryError) throw queryError;
+    setVendors(data || []);
+  }
+  async function saveVendor(e) {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      if (!["admin","management"].includes(membership?.role)) throw new Error("Somente ADMIN e Gerência podem cadastrar empresas terceirizadas.");
+      const payload = { store_id: storeId, name: vendorForm.name.trim(), service_type: vendorForm.service_type.trim() || null, contact_name: vendorForm.contact_name.trim() || null, phone: vendorForm.phone.trim() || null, email: vendorForm.email.trim() || null, notes: vendorForm.notes.trim() || null, updated_at: new Date().toISOString() };
+      if (vendorForm.id) {
+        const { error: updateError } = await supabase.from("maintenance_vendors").update(payload).eq("id", vendorForm.id).eq("store_id", storeId);
+        if (updateError) throw updateError;
+        setNotice("Cadastro da empresa atualizado.");
+      } else {
+        const { error: insertError } = await supabase.from("maintenance_vendors").insert({ ...payload, created_by: session.user.id });
+        if (insertError) throw insertError;
+        setNotice("Empresa terceirizada cadastrada.");
+      }
+      setVendorForm({ id:"", name:"", service_type:"", contact_name:"", phone:"", email:"", notes:"" });
+      await loadVendors();
+    } catch (e) { setError(e.message || "Não foi possível salvar a empresa."); }
+    finally { setBusy(false); }
+  }
+  async function toggleVendor(vendor) {
+    if (!["admin","management"].includes(membership?.role)) return;
+    setBusy(true); setError("");
+    try {
+      const { error: updateError } = await supabase.from("maintenance_vendors").update({ active: !vendor.active, updated_at: new Date().toISOString() }).eq("id", vendor.id).eq("store_id", storeId);
+      if (updateError) throw updateError;
+      await loadVendors();
+      setNotice(vendor.active ? "Empresa desativada. O histórico dos chamados foi preservado." : "Empresa reativada.");
+    } catch (e) { setError(e.message || "Não foi possível alterar a empresa."); }
+    finally { setBusy(false); }
   }
   async function loadMonthlyPeriods(id = membership?.store_id) {
     if (!id || !supabase) return;
@@ -464,7 +505,7 @@ function App() {
   }).sort((a,b)=>b.actual-a.actual),[stores,comparisonFilteredTickets,comparisonPeriods,currentMonthKey]);
   const comparisonTotals=comparisonRows.reduce((a,x)=>({count:a.count+x.count,requested:a.requested+x.requested,approved:a.approved+x.approved,actual:a.actual+x.actual}),{count:0,requested:0,approved:0,actual:0});
 
-  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); if (target === "comparative-financial") loadComparisonData(); };
+  const go = (target) => { setError(""); setNotice(null); setPage(target); setMobileMenu(false); if (target === "comparative-financial") loadComparisonData(); if (target === "vendors") loadVendors(); };
   const publicPage = ["new","track"].includes(page);
   const selectedStore = stores.find(s => s.id === storeId);
   const chooseStore = (id) => { setStoreId(id); setError(""); setNotice(null); setTicketResult(null); setTracking(null); setForm(f => ({...f, sector_id:"", category_id:""})); loadBootstrap(id); setPage(session?.user?.user_metadata?.must_change_password === true ? "change-password" : session?.user ? "dashboard" : "new"); };
@@ -551,6 +592,7 @@ function App() {
             {canApprove && <button className="button button-secondary" onClick={() => go("financial")}>Painel financeiro</button>}
             {["admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => go("comparative-financial")}>Comparativo entre lojas</button>}
             {canManageUsers && <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>}
+            {canManageUsers && <button className="button button-secondary" onClick={() => go("vendors")}>Empresas terceirizadas</button>}
             <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button>
           </div></div>
         <div className="stat-grid"><div className="stat-card"><span>Chamados registrados</span><strong>{stats.total}</strong><ClipboardList size={20}/></div><div className="stat-card stat-open"><span>Abertos</span><strong>{stats.open}</strong><Ticket size={20}/></div><div className="stat-card stat-active"><span>Em andamento / espera</span><strong>{stats.active}</strong><Activity size={20}/></div><div className="stat-card stat-done"><span>Resolvidos</span><strong>{stats.resolved}</strong><CheckCircle2 size={20}/></div></div>
@@ -565,7 +607,8 @@ function App() {
           <div className="ticket-list">{visibleTickets.length ? visibleTickets.map(t => <article className="ticket-row" key={t.id}><div className="ticket-row-head"><div className="ticket-main"><span className="ticket-protocol">{t.protocol}</span><h4>{t.title}</h4><p>{t.location} · {t.requester_name}</p>{t.approval_status === "approved" && t.approval_note?.split("\n").find(line => line.startsWith("Aprovado por:")) && <p className="approval-attribution">{t.approval_note.split("\n").find(line => line.startsWith("Aprovado por:"))}</p>}</div><div className="ticket-tags"><Priority value={t.priority}/><Status value={t.status}/>{(() => { const age = ticketAge(t); return <div className={`ticket-age age-${age.level}`} title={age.terminal ? "Tempo total até o encerramento" : "Tempo desde a abertura"}><strong>{age.label}</strong><small>{age.days} {age.days === 1 ? "dia" : "dias"}</small></div>; })()}</div><div className="ticket-date">{new Date(t.opened_at).toLocaleDateString("pt-BR")}</div>
               <button className="button button-secondary ticket-manage" onClick={() => setExpandedTicket(expandedTicket === t.id ? "" : t.id)}>{expandedTicket === t.id ? "Fechar" : "Ações"}</button></div>
               {expandedTicket === t.id && <div className="ticket-actions">
-                <div className="ticket-financials"><span>Orçamento solicitado: {t.estimated_budget == null ? "—" : Number(t.estimated_budget).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Valor aprovado: {t.approved_budget == null ? "—" : Number(t.approved_budget).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Custo realizado: {t.actual_cost == null ? "—" : Number(t.actual_cost).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span>{t.approved_budget != null && t.actual_cost != null && <span className={Number(t.actual_cost) > Number(t.approved_budget) ? "warning-text" : "financial-positive"}>Diferença: {(Number(t.approved_budget)-Number(t.actual_cost)).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} {Number(t.actual_cost) > Number(t.approved_budget) ? "acima do aprovado" : "saldo"}</span>}<span>Aprovação: {({not_required:"Não solicitada",pending:"Pendente",approved:"Aprovada",rejected:"Reprovada"})[t.approval_status] || "—"}</span>{t.is_incorrect && <span className="warning-text">Abertura incorreta</span>}</div>
+                <div className="ticket-financials"><span>Empresa terceirizada: {vendors.find(v => v.id === t.vendor_id)?.name || "Não vinculada"}</span>{t.third_party_reference && <span>OS / Protocolo terceirizada: {t.third_party_reference}</span>}{t.third_party_quote != null && <span>Orçamento terceirizada: {money(t.third_party_quote)}</span>}{t.third_party_notes && <span>Observações terceirizada: {t.third_party_notes}</span>}<span>Orçamento solicitado: {t.estimated_budget == null ? "—" : Number(t.estimated_budget).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Valor aprovado: {t.approved_budget == null ? "—" : Number(t.approved_budget).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span><span>Custo realizado: {t.actual_cost == null ? "—" : Number(t.actual_cost).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span>{t.approved_budget != null && t.actual_cost != null && <span className={Number(t.actual_cost) > Number(t.approved_budget) ? "warning-text" : "financial-positive"}>Diferença: {(Number(t.approved_budget)-Number(t.actual_cost)).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} {Number(t.actual_cost) > Number(t.approved_budget) ? "acima do aprovado" : "saldo"}</span>}<span>Aprovação: {({not_required:"Não solicitada",pending:"Pendente",approved:"Aprovada",rejected:"Reprovada"})[t.approval_status] || "—"}</span>{t.is_incorrect && <span className="warning-text">Abertura incorreta</span>}</div>
+                {["admin","management","maintenance","maintenance_assistant"].includes(membership.role) && <div className="ticket-attachments"><strong>Atendimento terceirizado</strong><Field label="Empresa responsável"><select value={t.vendor_id || ""} onChange={e => runOps({action:"set_vendor_details",ticket_id:t.id,vendor_id:e.target.value || null})}><option value="">Não vinculada</option>{vendors.filter(v => v.active || v.id === t.vendor_id).map(v=><option key={v.id} value={v.id}>{v.name}{v.active ? "" : " (inativa)"}</option>)}</select></Field><div className="form-actions"><button type="button" className="button button-secondary" onClick={() => { const value = window.prompt("Número da ordem de serviço ou protocolo da empresa:", t.third_party_reference || ""); if (value !== null) runOps({action:"set_vendor_details",ticket_id:t.id,third_party_reference:value}); }}>Registrar OS / protocolo</button><button type="button" className="button button-secondary" onClick={() => { const value = window.prompt("Orçamento informado pela terceirizada (R$):", t.third_party_quote ?? ""); if (value !== null) runOps({action:"set_vendor_details",ticket_id:t.id,third_party_quote:value}); }}>Registrar orçamento</button><button type="button" className="button button-secondary" onClick={() => { const value = window.prompt("Observações do atendimento terceirizado:", t.third_party_notes || ""); if (value !== null) runOps({action:"set_vendor_details",ticket_id:t.id,third_party_notes:value}); }}>Observações</button></div></div>}
                 {canOperate && <Field label="Alterar status"><select value={t.status} onChange={e => runOps({action:"set_status",ticket_id:t.id,status:e.target.value})}>{Object.entries(statusLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
                 {["maintenance","maintenance_assistant","admin"].includes(membership.role) && <button className="button button-secondary" onClick={() => { const note = window.prompt("Justificativa para solicitar aprovação gerencial:"); if (note) runOps({action:"request_approval",ticket_id:t.id,note}); }}>Solicitar aprovação</button>}
                 {canApprove && t.approval_status === "pending" && <><button className="button button-primary" onClick={() => runOps({action:"decide_approval",ticket_id:t.id,decision:"approved"})}>Aprovar execução</button><button className="button button-secondary" onClick={() => { const note = window.prompt("Justificativa obrigatória para reprovar (mínimo 5 caracteres):"); if (note && note.trim().length >= 5) runOps({action:"decide_approval",ticket_id:t.id,decision:"rejected",note:note.trim()}); else if (note !== null) setError("Informe uma justificativa com pelo menos 5 caracteres."); }}>Reprovar com justificativa</button></>}
@@ -636,6 +679,22 @@ function App() {
           </div>
           <div className="form-footer"><span>Chamados do perfil Administrativo recebem prioridade alta automaticamente.</span><button className="button button-primary" disabled={busy}>Registrar chamado <ArrowRight size={16}/></button></div>
         </form>
+      </section>}
+      {page === "vendors" && session && membership && canManageUsers && <section className="panel form-panel page-panel">
+        <div className="panel-heading"><div><span className="section-index">CADASTRO DE PRESTADORES</span><h3>Empresas terceirizadas</h3></div><button className="button button-secondary" onClick={()=>go("dashboard")}>Voltar à fila</button></div>
+        <form onSubmit={saveVendor}>
+          <div className="form-grid">
+            <Field label="Nome da empresa *"><input required minLength="2" maxLength="120" value={vendorForm.name} onChange={e=>setVendorForm(v=>({...v,name:e.target.value}))} placeholder="Razão social ou nome conhecido"/></Field>
+            <Field label="Especialidade / serviço"><input maxLength="120" value={vendorForm.service_type} onChange={e=>setVendorForm(v=>({...v,service_type:e.target.value}))} placeholder="Ex.: refrigeração, elétrica, elevadores"/></Field>
+            <Field label="Contato responsável"><input maxLength="120" value={vendorForm.contact_name} onChange={e=>setVendorForm(v=>({...v,contact_name:e.target.value}))}/></Field>
+            <Field label="Telefone"><input maxLength="40" value={vendorForm.phone} onChange={e=>setVendorForm(v=>({...v,phone:e.target.value}))}/></Field>
+            <Field label="E-mail"><input type="email" maxLength="160" value={vendorForm.email} onChange={e=>setVendorForm(v=>({...v,email:e.target.value}))}/></Field>
+            <div className="span-2"><Field label="Observações"><textarea rows="3" maxLength="1000" value={vendorForm.notes} onChange={e=>setVendorForm(v=>({...v,notes:e.target.value}))}/></Field></div>
+          </div>
+          <div className="form-footer"><span>{vendorForm.id ? "Editando cadastro existente" : "Cadastro restrito a ADMIN e Gerência."}</span><div className="form-actions">{vendorForm.id && <button type="button" className="button button-secondary" onClick={()=>setVendorForm({id:"",name:"",service_type:"",contact_name:"",phone:"",email:"",notes:""})}>Cancelar edição</button>}<button className="button button-primary" disabled={busy}>{vendorForm.id ? "Salvar alterações" : "Cadastrar empresa"} <ArrowRight size={16}/></button></div></div>
+        </form>
+        <div className="user-list">{vendors.map(v=><div className="user-row" key={v.id}><div><strong>{v.name} {!v.active && <span className="muted">· Inativa</span>}</strong><span>{v.service_type || "Especialidade não informada"} · {v.contact_name || "Sem contato"} · {v.phone || "Sem telefone"}</span></div><div className="form-actions"><button className="button button-secondary" onClick={()=>setVendorForm({id:v.id,name:v.name,service_type:v.service_type||"",contact_name:v.contact_name||"",phone:v.phone||"",email:v.email||"",notes:v.notes||""})}>Editar</button><button className="button button-secondary" onClick={()=>toggleVendor(v)} disabled={busy}>{v.active ? "Desativar" : "Reativar"}</button></div></div>)}</div>
+        {!vendors.length && <p className="muted">Nenhuma empresa terceirizada cadastrada nesta unidade.</p>}
       </section>}
       {page === "users" && session && membership && canManageUsers && <section className="panel form-panel page-panel">
         <div className="panel-heading"><div><span className="section-index">ADMINISTRAÇÃO DA EQUIPE</span><h3>Usuários da unidade</h3></div><button className="button button-secondary" onClick={()=>go("dashboard")}>Voltar ao painel</button></div>
