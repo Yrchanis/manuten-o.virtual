@@ -586,7 +586,7 @@ function App() {
       {publicPage && <section className="hero">
         <div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line"/> OPERAÇÃO • MANUTENÇÃO</div>
           <h1>Manutenção em<br/><em>movimento.</em></h1>
-          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div>
+          <p>Registre uma necessidade, acompanhe o atendimento e mantenha a operação funcionando.</p><div className="active-store-label"><Building2 size={14}/>{selectedStore?.name}</div>
         </div>
         <div className="hero-art" aria-hidden="true"><div className="art-ring ring-one"/><div className="art-ring ring-two"/><div className="art-center"><Wrench size={44}/></div><span className="art-cross cross-a">+</span><span className="art-cross cross-b">+</span></div>
       </section>}
@@ -646,16 +646,22 @@ function App() {
       {page === "change-password" && session && <section className="login-layout"><div className="login-aside"><div className="eyebrow">SEGURANÇA DA CONTA</div><h1>Atualize sua<br/><em>senha.</em></h1><p>Antes de acessar os dados internos, defina uma senha pessoal e confidencial.</p></div><section className="panel login-panel"><div className="login-icon"><LockKeyhole size={22}/></div><span className="section-index">PRIMEIRO ACESSO</span><h2>Definir nova senha</h2><p>Use pelo menos 6 caracteres. Não compartilhe sua senha.</p><form onSubmit={updateFirstPassword}><Field label="Nova senha"><input type="password" autoComplete="new-password" minLength="6" required value={passwordChange.password} onChange={e => setPasswordChange(v => ({...v,password:e.target.value}))} placeholder="Mínimo de 6 caracteres"/></Field><Field label="Confirmar nova senha"><input type="password" autoComplete="new-password" minLength="6" required value={passwordChange.confirm} onChange={e => setPasswordChange(v => ({...v,confirm:e.target.value}))} placeholder="Repita a nova senha"/></Field><button className="button button-primary full" disabled={busy}>{busy ? "Salvando..." : "Salvar nova senha"} <ArrowRight size={17}/></button></form><button className="text-link back-link" onClick={signOut}>Sair</button></section></section>}
 
       {page === "dashboard" && session && membership && <section className="dashboard">
-        <div className="dash-heading"><div><div className="eyebrow">VISÃO OPERACIONAL</div><h1>Painel de manutenção</h1><p>{membership.stores?.name || "Unidade"} · {roleLabels[membership.role] || membership.role}</p></div><div className="dash-actions">
-            {canCreateInternal && <button className="button button-primary" onClick={() => go("internal-new")}><Plus size={16}/> Novo chamado</button>}
-            {(membership.role === "administrative" || canApprove) && <button className="button button-secondary" onClick={exportReport}>Relatórios CSV</button>}
-            {canApprove && <button className="button button-secondary" onClick={() => go("financial")}>Painel financeiro</button>}
-            {["admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => go("comparative-financial")}>Comparativo entre lojas</button>}
-            {canManageUsers && <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>}
-            {canManageUsers && <button className="button button-secondary" onClick={() => go("vendors")}>Empresas terceirizadas</button>}
-            <button className="button button-secondary" onClick={() => go("preventive")}>Manutenção preventiva</button>
-            <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar</button>
-          </div></div>
+        <div className="dash-heading"><div><div className="eyebrow">VISÃO OPERACIONAL</div><h1>Painel de manutenção</h1><p>{membership.stores?.name || "Unidade"} · {roleLabels[membership.role] || membership.role}</p></div><nav className="dashboard-nav" aria-label="Navegação da manutenção">
+            <div className="nav-group nav-primary"><span>OPERAÇÃO</span>
+              {canCreateInternal && <button className="button button-primary" onClick={() => go("internal-new")}><Plus size={16}/> Novo chamado</button>}
+              <button className="button button-secondary" onClick={() => loadTickets()}><RefreshCw size={16}/> Atualizar fila</button>
+              <button className="button button-secondary" onClick={() => go("preventive")}>Preventiva</button>
+            </div>
+            {(canApprove || canManageUsers || membership.role === "administrative") && <div className="nav-group"><span>GESTÃO</span>
+              {(membership.role === "administrative" || canApprove) && <button className="button button-secondary" onClick={exportReport}>Relatórios CSV</button>}
+              {canApprove && <button className="button button-secondary" onClick={() => go("financial")}>Financeiro</button>}
+              {["admin","management"].includes(membership.role) && <button className="button button-secondary" onClick={() => go("comparative-financial")}>Comparativo de lojas</button>}
+            </div>}
+            {canManageUsers && <div className="nav-group"><span>ADMINISTRAÇÃO</span>
+              <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>
+              <button className="button button-secondary" onClick={() => go("vendors")}>Terceirizadas</button>
+            </div>}
+          </nav></div></div>
         <div className="stat-grid"><div className="stat-card"><span>Chamados registrados</span><strong>{stats.total}</strong><ClipboardList size={20}/></div><div className="stat-card stat-open"><span>Abertos</span><strong>{stats.open}</strong><Ticket size={20}/></div><div className="stat-card stat-active"><span>Em andamento / espera</span><strong>{stats.active}</strong><Activity size={20}/></div><div className="stat-card stat-done"><span>Resolvidos</span><strong>{stats.resolved}</strong><CheckCircle2 size={20}/></div></div>
         <section className="panel queue-panel"><div className="queue-heading"><div><span className="section-index">ACOMPANHAMENTO</span><h3>Fila de chamados</h3></div><span className="count-pill">{visibleTickets.length} registros</span></div>
           <div className="queue-tools"><div className="search-box"><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar protocolo, local ou título"/></div></div>
