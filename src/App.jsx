@@ -661,7 +661,7 @@ function App() {
               <button className="button button-secondary" onClick={() => { loadUsers(); go("users"); }}>Usuários</button>
               <button className="button button-secondary" onClick={() => go("vendors")}>Terceirizadas</button>
             </div>}
-          </nav></div></div>
+          </nav></div>
         <div className="stat-grid"><div className="stat-card"><span>Chamados registrados</span><strong>{stats.total}</strong><ClipboardList size={20}/></div><div className="stat-card stat-open"><span>Abertos</span><strong>{stats.open}</strong><Ticket size={20}/></div><div className="stat-card stat-active"><span>Em andamento / espera</span><strong>{stats.active}</strong><Activity size={20}/></div><div className="stat-card stat-done"><span>Resolvidos</span><strong>{stats.resolved}</strong><CheckCircle2 size={20}/></div></div>
         <section className="panel queue-panel"><div className="queue-heading"><div><span className="section-index">ACOMPANHAMENTO</span><h3>Fila de chamados</h3></div><span className="count-pill">{visibleTickets.length} registros</span></div>
           <div className="queue-tools"><div className="search-box"><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar protocolo, local ou título"/></div></div>
