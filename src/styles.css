@@ -146,3 +146,95 @@
 .financial-history-row b{font-size:12px;text-transform:capitalize}
 .financial-history-row small{font-size:10px;color:var(--muted)}
 @media(max-width:620px){.monthly-goal-heading{display:grid}.monthly-goal-form{grid-template-columns:1fr auto}.monthly-goal-form label{grid-column:1/-1}.monthly-goal-caption{align-items:flex-start;flex-direction:column}.financial-history{padding:18px 14px}.financial-history-row{align-items:flex-start;flex-direction:column}}
+
+
+/* REDESIGN 2026 — identidade visual inspirada no Assaí */
+:root{
+  color-scheme:dark;
+  --bg:#101114;
+  --panel:#191b20;
+  --panel2:#22252c;
+  --line:#30343d;
+  --muted:#969ba5;
+  --soft:#c4c8d0;
+  --white:#f7f7f5;
+  --accent:#ff8a00;
+  --accent2:#ffd21a;
+  --green:#62c99a;
+  --red:#ff7373;
+  --blue:#77aef4;
+}
+body{background:linear-gradient(180deg,#17191d 0,#101114 280px);color:var(--white)}
+.topbar{height:68px;background:rgba(15,16,18,.96);border-bottom:1px solid #ff8a0033;position:sticky;top:0;backdrop-filter:blur(18px)}
+.topbar-inner,.footer-inner{max-width:1500px}
+.brand-mark{background:linear-gradient(145deg,#ffd21a 0%,#ff8a00 85%);color:#17130b;box-shadow:0 4px 18px #ff8a0030;border-radius:10px}
+.brand strong span{color:var(--accent)}
+.brand small{color:#b6bac2}
+.main-wrap{max-width:1500px;padding-left:clamp(18px,3vw,42px);padding-right:clamp(18px,3vw,42px)}
+.eyebrow,.section-index,.side-kicker{color:var(--accent)}
+.hero{border-bottom-color:#ff8a0026}
+.hero h1 em,.login-aside h1 em,.store-select-heading h1 em{color:var(--accent2)}
+.art-ring{border-color:#ff8a0030}
+.art-center{border-color:#ff8a0060;color:var(--accent2);background:linear-gradient(145deg,#302316,#191b20);box-shadow:0 0 70px #ff8a001c}
+.panel{background:linear-gradient(145deg,#1d2026,#181a1f);border-color:#343943;border-radius:13px;box-shadow:0 12px 36px #00000020}
+.form-panel,.queue-panel,.financial-panel,.financial-breakdown,.financial-history{box-shadow:0 10px 30px #00000018}
+.field input:focus,.field select:focus,.field textarea:focus,.queue-tools select:focus{border-color:var(--accent);box-shadow:0 0 0 3px #ff8a001b}
+.button-primary{background:linear-gradient(120deg,#ffd21a,#ff9a00);color:#17130b;box-shadow:0 5px 16px #ff8a0025}
+.button-primary:hover{background:linear-gradient(120deg,#ffe15a,#ffad32)}
+.button-secondary{background:#252830;border-color:#3b404b;color:#e5e7eb}
+.button-secondary:hover{background:#30343d;border-color:#ff8a0080;color:#fff}
+.text-link:hover,.login-link:hover,.ticket-protocol{color:var(--accent2)}
+.store-card{background:linear-gradient(145deg,#202329,#191b20);border-color:#383d47}
+.store-card:hover{border-color:var(--accent);background:linear-gradient(145deg,#302316,#191b20)}
+.store-card-code,.active-store-label{color:var(--accent2);border-color:#ff8a0055;background:#ff8a0010}
+.store-card-action{color:var(--accent2)}
+.dashboard{padding-top:30px}
+.dash-heading{align-items:flex-start;gap:22px;margin-bottom:20px}
+.dash-heading h1{font-size:clamp(25px,2.5vw,32px);letter-spacing:-.8px}
+.dash-heading .eyebrow{font-size:10px}
+.dashboard-nav{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:0 0 22px;padding:12px;background:#181a1f;border:1px solid var(--line);border-radius:12px}
+.nav-group{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:2px 12px;border-left:1px solid #343943}
+.nav-group:first-child{border-left:0;padding-left:2px}
+.nav-group>span{width:100%;font:600 9px 'DM Mono',monospace;letter-spacing:1.5px;color:#a4a9b2;padding:0 3px 3px}
+.nav-group .button{padding:9px 12px;font-size:11px;min-height:36px}
+.nav-primary .button-primary{font-weight:800}
+.stat-grid{gap:12px;margin-bottom:18px}
+.stat-card{background:linear-gradient(145deg,#1e2127,#191b20);border-color:#343943;border-radius:11px;padding:17px 18px}
+.stat-card strong{font-size:29px}
+.stat-open>svg{color:var(--accent2)}
+.queue-panel{padding:22px 24px}
+.queue-heading h3{font-size:20px}
+.queue-tabs{border-bottom-color:#373c46}
+.queue-tab{background:#22252c;border-color:#383d47;color:#c3c8d1}
+.queue-tab.active{background:linear-gradient(120deg,#ffd21a,#ff9a00);border-color:#ffae00;color:#17130b}
+.queue-tab.active span{background:#17130b20;color:#17130b}
+.ticket-row{border-top-color:#30343d}
+.ticket-row:hover{background:#ffffff04}
+.ticket-actions,.ticket-history,.ticket-attachments{background:#14161a;border-color:#343943}
+.ticket-history>strong,.ticket-attachments>strong{color:var(--accent2)}
+.priority-high,.status-open{background:#493019;color:#ffc15b}
+.priority-critical,.criticality-critical{background:#512329;color:#ff9a9a}
+.criticality-low{background:#242e39;color:#a9c6e8}
+.criticality-moderate{background:#303039;color:#d2c5a6}
+.criticality-high{background:#493019;color:#ffc15b}
+.financial-kpi,.monthly-goal-card{background:#14161a;border-color:#343943}
+.monthly-goal-track>div{background:linear-gradient(90deg,#ff8a00,#ffd21a)}
+.alert-error{background:#482328;border-color:#81404a}
+.alert-success{background:#19382e;border-color:#2c6a52}
+.footer{border-top-color:#ff8a0026}
+.footer .brand-mark{background:linear-gradient(145deg,#ffd21a,#ff8a00)}
+@media(max-width:900px){
+ .dash-heading{display:block}
+ .dashboard-nav{margin-top:14px}
+ .nav-group{border-left:0;padding:4px 2px}
+}
+@media(max-width:680px){
+ .topbar{height:62px}
+ .dashboard{padding-top:22px}
+ .dashboard-nav{display:grid;gap:8px;padding:10px}
+ .nav-group{border-top:1px solid #343943;padding:10px 2px 2px}
+ .nav-group:first-child{border-top:0}
+ .nav-group .button{flex:1 1 auto}
+ .queue-panel{padding:17px 13px}
+ .dash-heading{margin-bottom:14px}
+}
